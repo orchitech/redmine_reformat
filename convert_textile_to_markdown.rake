@@ -87,7 +87,7 @@ def convert_textile_to_markdown(textile)
     '-o',
     dst.path,
   ]
-  exec_with_timeout(*command, 10)
+  exec_with_timeout(command.join(" "), 10)
 
   dst.open
   markdown = dst.read
