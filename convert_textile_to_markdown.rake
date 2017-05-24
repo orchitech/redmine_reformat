@@ -18,8 +18,12 @@ task :convert_textile_to_markdown => :environment do
 
         textile = model[attribute]
         if textile != nil
-          markdown = convert_textile_to_markdown(textile)
-          model.update_column(attribute, markdown)
+          begin
+            markdown = convert_textile_to_markdown(textile)
+            model.update_column(attribute, markdown)
+          rescue
+            puts "Failed to convert #{model.id}"
+          end
         end
       end
       count += 1
@@ -83,7 +87,7 @@ def convert_textile_to_markdown(textile)
     '-o',
     dst.path,
   ]
-  system(*command, :out => $stdout) or raise 'pandoc failed'
+  exec_with_timeout(*command, 10)
 
   dst.open
   markdown = dst.read
@@ -109,3 +113,37 @@ def convert_textile_to_markdown(textile)
 
   return markdown
 end
+
+def exec_with_timeout(cmd, timeout)
+  begin
+    # stdout, stderr pipes
+    rout, wout = IO.pipe
+    rerr, werr = IO.pipe
+    stdout, stderr = nil
+
+    pid = Process.spawn(cmd, pgroup: true, :out => wout, :err => werr)
+
+    Timeout.timeout(timeout) do
+      Process.waitpid(pid)
+
+      # close write ends so we can read from them
+      wout.close
+      werr.close
+
+      stdout = rout.readlines.join
+      stderr = rerr.readlines.join
+    end
+
+  rescue Timeout::Error
+    Process.kill(-9, pid)
+    Process.detach(pid)
+    raise "timed out"
+  ensure
+    wout.close unless wout.closed?
+    werr.close unless werr.closed?
+    # dispose the read ends of the pipes
+    rout.close
+    rerr.close
+  end
+  stdout
+ end
