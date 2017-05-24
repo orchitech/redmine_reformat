@@ -115,6 +115,8 @@ def convert_textile_to_markdown(textile)
 end
 
 def exec_with_timeout(cmd, timeout)
+  require 'timeout'
+  
   begin
     # stdout, stderr pipes
     rout, wout = IO.pipe
