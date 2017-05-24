@@ -21,8 +21,8 @@ task :convert_textile_to_markdown => :environment do
           begin
             markdown = convert_textile_to_markdown(textile)
             model.update_column(attribute, markdown)
-          rescue
-            puts "Failed to convert #{model.id}"
+          rescue => err
+            puts "Failed to convert #{model.id}: #{err}"
           end
         end
       end
