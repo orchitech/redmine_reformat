@@ -52,14 +52,6 @@ def convert_textile_to_markdown(textile)
   tag_code = 'pandoc-unescaped-single-backtick'
   textile.gsub!(/@([\S]+@[\S]+)@/, tag_code + '\\1' + tag_code)
 
-  # Drop table colspan/rowspan notation ("|\2." or "|/2.") because pandoc does not support it
-  # See https://github.com/jgm/pandoc/issues/22
-  textile.gsub!(/\|[\/\\]\d\. /, '| ')
-
-  # Drop table alignement notation ("|>." or "|<." or "|=.") because pandoc does not support it
-  # See https://github.com/jgm/pandoc/issues/22
-  textile.gsub!(/\|[<>=]\. /, '| ')
-
   # Move the class from <code> to <pre> so pandoc can generate a code block with correct language
   textile.gsub!(/(<pre)(><code)( class="[^"]*")(>)/, '\\1\\3\\2\\4')
 
@@ -78,6 +70,14 @@ def convert_textile_to_markdown(textile)
   # Force <pre> to have a blank line before them
   # Without this fix, a list of items containing <pre> would not be interpreted as a list at all.
   textile.gsub!(/([^\n])(<pre)/, "\\1\n\n\\2")
+
+  # Drop table colspan/rowspan notation ("|\2." or "|/2.") because pandoc does not support it
+  # See https://github.com/jgm/pandoc/issues/22
+  textile.gsub!(/\|[\/\\]\d\. /, '| ')
+
+  # Drop table alignement notation ("|>." or "|<." or "|=.") because pandoc does not support it
+  # See https://github.com/jgm/pandoc/issues/22
+  textile.gsub!(/\|[<>=]\. /, '| ')
 
   # Some malformed textile content make pandoc run extremely slow,
   # so we convert it to proper textile before hitting pandoc
