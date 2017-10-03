@@ -76,11 +76,11 @@ def convert_textile_to_markdown(textile)
   # comment "<!-- -->" (see http://pandoc.org/README.html#ending-a-list)
   # which are unfortunately not supported by Redmine (see http://www.redmine.org/issues/20497)
   tag_fenced_code_block = 'force-pandoc-to-ouput-fenced-code-block'
-  textile.gsub!(/([^\n]<pre)(>)/, "\\1 class=\"#{tag_fenced_code_block}\"\\2")
+  textile.gsub!(/([^\n\r]\s*<pre\b)\s*(>)/, "\\1 class=\"#{tag_fenced_code_block}\"\\2")
 
   # Force <pre> to have a blank line before them
   # Without this fix, a list of items containing <pre> would not be interpreted as a list at all.
-  textile.gsub!(/([^\n])(<pre)/, "\\1\n\n\\2")
+  textile.gsub!(/([^\n\r]\s*)(<pre\b)/, "\\1\n\n\\2")
 
   # Drop table colspan/rowspan notation ("|\2." or "|/2.") because pandoc does not support it
   # See https://github.com/jgm/pandoc/issues/22
