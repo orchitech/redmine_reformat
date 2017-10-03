@@ -63,8 +63,8 @@ def convert_textile_to_markdown(textile)
   # So we inject a placeholder that will be replaced later on with a real backtick.
   textile.gsub!(/@([\S]+@[\S]+)@/, tag_code + '\\1' + tag_code)
 
-  # Move the class from <code> to <pre> so pandoc can generate a code block with correct language
-  textile.gsub!(/(<pre)(><code)( class="[^"]*")(>)/, '\\1\\3\\2\\4')
+  # Move the class from <code> to <pre> and remove <code> so pandoc can generate a code block with correct language
+  textile.gsub!(/(<pre\b)\s*(>)\s*<code\b(\s+class="[^"]*")?[^>]*>([\s\S]*?)<\/code>\s*(<\/pre>)/, '\\1\\3\\2\\4\\5')
 
   # Remove the <code> directly inside <pre>, because pandoc would incorrectly preserve it
   textile.gsub!(/(<pre[^>]*>)<code>/, '\\1')
