@@ -85,6 +85,7 @@ def convert_textile_to_markdown(textile)
   textile.gsub!(/-          # (\d+)/, "* \\1")
 
   src = Tempfile.new('src')
+  src.binmode
   src.write(textile)
   src.close
   dst = Tempfile.new('dst')
