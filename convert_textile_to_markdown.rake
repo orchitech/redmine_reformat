@@ -47,20 +47,9 @@ end
 def convert_textile_to_markdown(textile)
   require 'tempfile'
 
-  # Replace any non <pre> or <code> tags that are not contained in a <pre> block
-  # with @ to format it as inline code;
-  # This works around the problem that Textile allows XML tags displayed
-  # as is while Redmine Markdown filters those out;
-  # Because those pseudo XML could be part of a word, we need to inject a placeholder
-  # because pandoc is not able to render that corretly
-  tag_code = 'pandoc-unescaped-single-backtick'
-  textile.gsub!(/(<pre\b[^>]*>)?(?(1)([\s\S]*?<\/pre>)|(<[\/>]?(?!pre\b|code\b)[^\/>]+[\/>]))/, '\\1\\2' + tag_code + '\\3' + tag_code)
-
-  # Replace inline <code> tags (that doesn't contain any linebreaks in its content) with @ to format it as inline code
-  textile.gsub!(/<code\b[^>]*>([\S\t ]*?)<\/code>/, '@\\1@')
-
   # Redmine support @ inside inline code marked with @ (such as "@git@github.com@"), but not pandoc.
   # So we inject a placeholder that will be replaced later on with a real backtick.
+  tag_code = 'pandoc-unescaped-single-backtick'
   textile.gsub!(/@([\S]+@[\S]+)@/, tag_code + '\\1' + tag_code)
 
   # Move the class from <code> to <pre> and remove <code> so pandoc can generate a code block with correct language
@@ -128,7 +117,6 @@ def convert_textile_to_markdown(textile)
   markdown.gsub!(' ' + tag_fenced_code_block, '')
 
   # Replace placeholder with real backtick
-  markdown.gsub!(tag_code + tag_code, '')
   markdown.gsub!(tag_code, '`')
 
   # Un-escape Redmine link syntax to wiki pages
