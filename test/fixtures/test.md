@@ -28,16 +28,18 @@ echo "OK"
 
 ## XML tags are preserved
 
-    <?xml version="1.0" encoding="UTF-8"?>
-    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-    <plist version="1.0">
-        <array>
-            <dict>
-                <key>foo</key>
-                <string>bar</string>
-            </dict>
-        </array>
-    </plist>
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <array>
+        <dict>
+            <key>foo</key>
+            <string>bar</string>
+        </dict>
+    </array>
+</plist>
+```
 
 ## Plain URL should not get broken by escaped characters
 
@@ -50,9 +52,9 @@ http://example.com/example_site/#test
 |                         |                   |
 | ----------------------- | ----------------- |
 | one                     | two               |
-| Cell spanning 2 columns |
+| Cell spanning 2 columns |                   |
 | Cell spanning 2 rows    | one               |
-| two                     |
+| two                     |                   |
 | Right-aligned cell      | Left-aligned cell |
 
 ## List with code block is partially supported
