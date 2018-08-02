@@ -8,8 +8,8 @@ def temp_file(name, content)
     file.path
 end
 
-input = File.read('test_input.textile')
-expected = File.read('test_output.markdown')
+input = File.read('test/fixtures/test.textile')
+expected = File.read('test/fixtures/test.md')
 actual = convert_textile_to_markdown(input);
 
 if actual != expected
