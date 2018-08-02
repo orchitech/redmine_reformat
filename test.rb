@@ -1,5 +1,6 @@
-require 'rake'
-load 'convert_textile_to_markdown.rake'
+$: << File.join(File.dirname(__FILE__), 'lib')
+
+require 'textile_to_markdown/convert_string'
 
 def temp_file(name, content)
     file = Tempfile.new(name)
@@ -10,7 +11,7 @@ end
 
 input = File.read('test/fixtures/test.textile')
 expected = File.read('test/fixtures/test.md')
-actual = convert_textile_to_markdown(input);
+actual = TextileToMarkdown::ConvertString.(input)
 
 if actual != expected
   a = temp_file('actual', actual)
