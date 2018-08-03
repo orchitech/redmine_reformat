@@ -13,6 +13,7 @@ module TextileToMarkdown
 
     def initialize(textile)
       @textile = textile.dup
+      @fragments = {}
     end
 
     def call
@@ -50,9 +51,42 @@ module TextileToMarkdown
 
     def pre_process_textile(textile)
 
+      # temporarily remove redmine macros (and some other stuff thats better
+      # when kept as-is) so they dont get corrupted
+      textile.gsub!(/^(!?\{\{(.+?)\}\})/m) do
+        all = $1
+        if $2 =~ /\A\s*collapse/
+          # collapse macro should contain textile, so keep it
+          all
+        else
+          "{{MDCONVERSION #{push_fragment(all)}}}"
+        end
+      end
+
+      # fix line endings
+      textile.gsub!(/\r\n?/, "\n")
+
+      # https://github.com/tckz/redmine-wiki_graphviz_plugin
+      textile.gsub!(/^(.*\{\{\s*graphviz_me.*)/m){ "{{MDCONVERSION #{push_fragment($1)}}}" }
+
+      # _(.*)_ gets misinterpreted, prevent that
+      textile.gsub!(/(_\([^\n]+?\)_)/){ "{{MDCONVERSION #{push_fragment($1)}}}" }
+
       # Redmine support @ inside inline code marked with @ (such as "@git@github.com@"), but not pandoc.
       # So we inject a placeholder that will be replaced later on with a real backtick.
       textile.gsub!(/@([\S]+@[\S]+)@/, TAG_CODE + '\\1' + TAG_CODE)
+
+      # wrap blocks starting with a leading space in <pre> tags since Redmine's
+      # textile treats them as code, however pandoc does not:
+      textile.gsub!(/(\A|\n$\n)^( +)(.+?)(\Z|\n$\n)/m) do
+        prefix = $1
+        strip_spaces = $2.length
+        postfix = $4
+        code_block = $3.split("\n").map do |line|
+          line.sub(/^ {#{strip_spaces}}/, '')
+        end.join("\n")
+        "#{prefix}\n<pre>\n#{code_block}\n</pre>#{postfix}"
+      end
 
       # Move the class from <code> to <pre> and remove <code> so pandoc can generate a code block with correct language
       textile.gsub!(/(<pre\b)\s*(>)\s*<code\b(\s+class="[^"]*")?[^>]*>([\s\S]*?)<\/code>\s*(<\/pre>)/, '\\1\\3\\2\\4\\5')
@@ -85,8 +119,21 @@ module TextileToMarkdown
       # see https://github.com/jgm/pandoc/issues/3020
       textile.gsub!(/-          # (\d+)/, "* \\1")
 
+      # long sequences of lines with leading dashes make pandoc hang, that's why
+      # we turn them into proper unordered lists:
+      textile.gsub!(/^(\s*)----(\s+[^-])/, "\\1****\\2")
+      textile.gsub!(/^(\s*)---(\s+[^-])/, "\\1***\\2")
+      textile.gsub!(/^(\s*)--(\s+[^-])/, "\\1**\\2")
+      textile.gsub!(/^(\s*)-(\s+[^-])/, "\\1*\\2")
+
+      # add new lines before lists
+      textile.gsub!(/^ *([^#].*?)\n(#+ )/m, "\\1\n\n\\2")
+      textile.gsub!(/^ *([^*].*?)\n(\*+ )/m, "\\1\n\n\\2")
+
+
       return textile
     end
+
 
 
     def post_process_markdown(markdown)
@@ -113,10 +160,24 @@ module TextileToMarkdown
       # does not supported HTML comments: http://www.redmine.org/issues/20497
       markdown.gsub!(/\n\n<!-- end list -->\n/, "\n")
 
+
       # Unescape URL that could easily get mangled
       markdown.gsub!(/(https?:\/\/\S+)/) { |link| link.gsub(/\\([_#])/, "\\1") }
 
+      # restore macros
+      markdown.gsub!(/\{\{MDCONVERSION (\w+)\}\}/){ pop_fragment $1 }
+
       return markdown
+    end
+
+    def push_fragment(text)
+      SecureRandom.hex.tap do |key|
+        @fragments[key] = text
+      end
+    end
+
+    def pop_fragment(key)
+      @fragments.delete key
     end
 
     def exec_with_timeout(cmd, timeout)

@@ -1,0 +1,2 @@
+*bold* _italic_ *_bold italic_* +underline+ -strike-through- Plain ^superscript^ Plain ~subscript~
+
