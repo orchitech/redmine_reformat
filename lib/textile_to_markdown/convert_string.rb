@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'open3'
 require 'tempfile'
 require 'timeout'
 
@@ -19,28 +20,17 @@ module TextileToMarkdown
     def call
       pre_process_textile @textile
 
-      src = Tempfile.new('src')
-      src.binmode
-      src.write(@textile)
-      src.close
-      dst = Tempfile.new('dst')
-      dst.close
-
       command = [
         'pandoc',
         '--wrap=preserve',
         '-f',
         'textile',
         '-t',
-        'gfm+smart',
-        src.path,
-        '-o',
-        dst.path,
+        'gfm+smart'
       ]
-      exec_with_timeout(command.join(" "), 30)
 
-      dst.open
-      return post_process_markdown dst.read
+      output = exec_with_timeout(command.join(" "), stdin: @textile)
+      return post_process_markdown output
     end
 
 
@@ -180,40 +170,24 @@ module TextileToMarkdown
       @fragments.delete key
     end
 
-    def exec_with_timeout(cmd, timeout)
-      begin
-        # stdout, stderr pipes
-        rout, wout = IO.pipe
-        rerr, werr = IO.pipe
-        stdout = nil
-        stderr = nil
+    def exec_with_timeout(cmd, timeout: 30, stdin:)
+      pid = nil
+      result = nil
 
-        pid = Process.spawn(cmd, pgroup: true, :out => wout, :err => werr)
-
-        Timeout.timeout(timeout) do
-          Process.waitpid(pid)
-
-          # close write ends so we can read from them
-          wout.close
-          werr.close
-
-          stdout = rout.readlines.join
-          stderr = rerr.readlines.join
+      Timeout.timeout(timeout) do
+        Open3.popen2(cmd) do |i, o, t|
+          pid = t.pid
+          (i << stdin).close
+          result = o.read
         end
-
       rescue Timeout::Error
         Process.kill(-9, pid)
         Process.detach(pid)
-        raise "timed out"
-      ensure
-        wout.close unless wout.closed?
-        werr.close unless werr.closed?
-        # dispose the read ends of the pipes
-        rout.close
-        rerr.close
+        puts 'timed out'
       end
-      puts stderr if stderr && stderr.length > 0
-      stdout
+
+      return result
     end
+
   end
 end
