@@ -35,14 +35,14 @@ module TextileToMarkdown
     end
 
     def call
-      fail "db is already set to markdown" if Setting.text_formatting == 'markdown'
-
       Project.transaction do
-        migrate_settings
-        migrate_objects
-        migrate_wiki_versions
-        migrate_custom_values
-        Setting.text_formatting = 'markdown'
+        Mailer.with_deliveries(false) do
+          migrate_settings
+          migrate_objects
+          migrate_wiki_versions
+          migrate_custom_values
+          Setting.text_formatting = 'markdown'
+        end
       end
     end
 
@@ -68,22 +68,18 @@ module TextileToMarkdown
     def migrate_objects
       ITEMS_TO_MIGRATE.each do |clazz, attribute|
         name = clazz.name
-        scope = clazz.where.not(attribute => nil)
-        puts "#{name} (#{clazz.count} records, #{scope.count} with #{attribute} set})"
-        scope.find_each do |object|
-          if textile = object.send(attribute)
-            if md = convert(textile)
-              object.update_column attribute, md
-            else
-              puts "failed to convert #{name} #{object.id}"
-            end
+        pluck_each clazz, attribute do |id, value|
+          if md = convert(value)
+            clazz.where(id: id).update_all(attribute => md)
+          else
+            puts "failed to convert #{name} #{object.id}"
           end
         end
       end
     end
 
     def migrate_wiki_versions
-      puts "Wiki versions"
+      puts "Wiki versions: #{WikiContent::Version.count}"
       WikiContent::Version.find_each do |version|
         if textile = version.text
           if md = convert(textile)
@@ -98,33 +94,55 @@ module TextileToMarkdown
       end
     end
 
-
     # convert custom values where applicable
     def migrate_custom_values
       puts "Custom values"
       CustomField.all.to_a.select{|cf|cf.text_formatting == 'full'}.each do |cf|
         print "custom field #{cf.name} (#{cf.custom_values.count} values) "
-        cf.custom_values.where.not(value: nil).find_each do |custom_value|
-          if textile = custom_value.value
-            if md = convert(textile)
-              custom_value.update_column :value, md
-            else
-              puts "failed to convert custom_value #{custom_value.id}"
-            end
+        pluck_each(cf.custom_values, :value) do |id, value|
+          if md = convert(value)
+            CustomValue.where(id: id).update_all(value: md)
+          else
+            puts "failed to convert custom_value #{custom_value.id}"
           end
         end
       end
 
       # journal details for formatted custom fields
       IssueCustomField.all.to_a.select{|cf|cf.text_formatting == 'full'}.each do |cf|
-        JournalDetail.where(property: 'cf', prop_key: cf.id).find_each do |detail|
-          if md = convert(detail.value)
-            detail.update_column :value, md
+        scope = JournalDetail.where(property: 'cf', prop_key: cf.id)
+        puts "JournalDetails (#{cf.name}): #{scope.count} records"
+        scope.pluck(:id, :value, :old_value).each do |id, value, old_value|
+          if md = convert(value)
+            value = md
           end
-          if md = convert(detail.old_value)
-            detail.update_column :old_value, md
+          if md = convert(old_value)
+            old_value = md
           end
+          JournalDetail.where(id: id).update_all(
+            value: value, old_value: old_value
+          )
         end
+      end
+    end
+
+
+    BATCHSIZE = 1000
+    def pluck_each(scope, attribute, &block)
+      all = scope.count
+      scope = scope.where.not(attribute => nil)
+      puts "#{scope.table_name}: #{scope.count} of #{all}"
+      scope = scope.reorder(id: :asc).limit(BATCHSIZE)
+
+      rows = scope.pluck(:id, attribute)
+      while rows.any?
+        row_count = rows.size
+        offset = rows.last[0]
+
+        rows.each{|r| yield r}
+
+        break if row_count < BATCHSIZE
+        rows = scope.where("id > ?", offset).pluck(:id, attribute)
       end
     end
 

@@ -170,20 +170,22 @@ module TextileToMarkdown
       @fragments.delete key
     end
 
-    def exec_with_timeout(cmd, timeout: 30, stdin:)
+    def exec_with_timeout(cmd, timeout: 10, stdin:)
       pid = nil
       result = nil
 
-      Timeout.timeout(timeout) do
-        Open3.popen2(cmd) do |i, o, t|
-          pid = t.pid
-          (i << stdin).close
-          result = o.read
+      begin
+        Timeout.timeout(timeout) do
+          Open3.popen2(cmd) do |i, o, t|
+            pid = t.pid
+            (i << stdin).close
+            result = o.read
+          end
         end
       rescue Timeout::Error
         Process.kill(-9, pid)
         Process.detach(pid)
-        puts 'timed out'
+        puts 'timeout'
       end
 
       return result
