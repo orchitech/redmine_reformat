@@ -37,9 +37,11 @@ module TextileToMarkdown
 
     private
 
-    TAG_CODE = 'pandoc-unescaped-single-backtick'
+    TAG_AT = 'pandoc-protected-at-sign'
+    TAG_HASH = 'pandoc-protected-hash-sign'
     TAG_FENCED_CODE_BLOCK = 'force-pandoc-to-ouput-fenced-code-block'
     TAG_NOTHING = 'pandoc-nothing-will-be-here'
+    TAG_DASH_SPACE = 'pandoc-protected-dash-space'
 
     def pre_process_textile(textile)
 
@@ -68,15 +70,30 @@ module TextileToMarkdown
       # more subsequent underscores get misinterpreted, prevent that
       textile.gsub!(/(_{2,})/){ "{{MDCONVERSION#{push_fragment($1)}}}" }
 
-      # _(...)_, *(...)* and +(...)+ gets misinterpreted, prevent that
-      textile.gsub!(/(?<!\w)(?'tag'[_+*])(?'content'\([^\n]+?\))\k'tag'(?!\w)/){ "#{$~[:tag]}#{TAG_NOTHING}#{$~[:content]}#{TAG_NOTHING}#{$~[:tag]}" }
+      # _(...)_, *(...)* etc. get misinterpreted, prevent that
+      textile.gsub!(/(?<!\w)(?'tag'[_+*~-])(?'content'\([^\n]+?\))\k'tag'(?!\w)/){ "#{$~[:tag]}#{TAG_NOTHING}#{$~[:content]}#{TAG_NOTHING}#{$~[:tag]}" }
 
-      # Prevent interpreting | as table separator when it is a part of wiki link
-      textile.gsub!(/(\[\[[^|\]]*\|[^|\]]*\]\])/){ "{{MDCONVERSION#{push_fragment($1)}}}" }
+      # protect wiki links
+      # escape following '(', which might be interpreted as MD link
+      textile.gsub!(/(!?\[\[[^\]\n\|]+(?:\|[^\]\n\|]+)?\]\])(( *\n? *)\()?/m) do
+        wiki_link, parenthesis_after, parenthesis_indent = $1, $2, $3
+        if parenthesis_after.nil?
+          "{{MDCONVERSION#{push_fragment($&)}}}"
+        else
+          escaped = "#{wiki_link}#{parenthesis_indent}\\("
+          "{{MDCONVERSION#{push_fragment(escaped)}}}"
+        end
+      end
 
       # Redmine support @ inside inline code marked with @ (such as "@git@github.com@"), but not pandoc.
-      # So we inject a placeholder that will be replaced later on with a real backtick.
-      textile.gsub!(/(?<!\w)@([\S]+@[\S]+)@(?!\w)/, TAG_CODE + '\\1' + TAG_CODE)
+      # Match inline code in RedCloth3 way and protect enclosed @ signs
+      textile.gsub!(/(?<!\w)@(?:\|(\w+?)\|)?(.+?)@(?!\w)/) do
+        # lang = $1 # lang is ignored even by Redmine
+        "@#{$2.gsub(/@/, TAG_AT)}@"
+      end
+
+      # Backslash-escaped issue links are ugly and backslash is not necessary
+      textile.gsub!(/#(?=\w)/, TAG_HASH)
 
       # blocks starting with a leading space are either space-indented lists or code blocks
       # pandoc treats them diferrently than Redmine, so remove leading spaces and add <pre> tags for non-lists:
@@ -94,6 +111,11 @@ module TextileToMarkdown
           line
         end.join("\n")
         "#{prefix}#{block_start}\n#{code_block}#{block_end}#{postfix}"
+      end
+
+      # Redmine allows mixing # and * in mixed lists, but not pandoc
+      textile.gsub!(/^ *[*#]([*#])+ /) do |m|
+        m.gsub(/[*#]/, $1)
       end
 
       # Move the class from <code> to <pre> and remove <code> so pandoc can generate a code block with correct language
@@ -131,17 +153,24 @@ module TextileToMarkdown
         end
       end
 
-      # Some malformed textile content make pandoc run extremely slow,
-      # so we convert it to proper textile before hitting pandoc
-      # see https://github.com/jgm/pandoc/issues/3020
-      textile.gsub!(/-          # (\d+)/, "* \\1")
+      if false
+        # update: the following was not obseved with recent pandoc and dashes are not lists in Textile
 
-      # long sequences of lines with leading dashes make pandoc hang, that's why
-      # we turn them into proper unordered lists:
-      textile.gsub!(/^(\s*)----(\s+[^-])/, "\\1****\\2")
-      textile.gsub!(/^(\s*)---(\s+[^-])/, "\\1***\\2")
-      textile.gsub!(/^(\s*)--(\s+[^-])/, "\\1**\\2")
-      textile.gsub!(/^(\s*)-(\s+[^-])/, "\\1*\\2")
+        # Some malformed textile content make pandoc run extremely slow,
+        # so we convert it to proper textile before hitting pandoc
+        # see https://github.com/jgm/pandoc/issues/3020
+        textile.gsub!(/-          # (\d+)/, "* \\1")
+
+        # long sequences of lines with leading dashes make pandoc hang, that's why
+        # we turn them into proper unordered lists:
+        textile.gsub!(/^(\s*)----(\s+[^-])/, "\\1****\\2")
+        textile.gsub!(/^(\s*)---(\s+[^-])/, "\\1***\\2")
+        textile.gsub!(/^(\s*)--(\s+[^-])/, "\\1**\\2")
+        textile.gsub!(/^(\s*)-(\s+[^-])/, "\\1*\\2")
+      else
+        # but these lines make pandoc add extra paragraphs, prevent it
+        textile.gsub!(/^- /, TAG_DASH_SPACE)
+      end
 
       # add new lines before lists - commented out, as this can break subsequent lists and
       # this should not be necessary - would have not worked even with Textile
@@ -162,15 +191,12 @@ module TextileToMarkdown
       # Remove the injected tag
       markdown.gsub!(' ' + TAG_FENCED_CODE_BLOCK, '')
 
-      # Replace placeholder with real backtick
-      markdown.gsub!(TAG_CODE, '`')
+      # Restore protected sequences that do not differ in code blocks and refular MD
+      markdown.gsub!(TAG_AT, '@')
+      markdown.gsub!(TAG_HASH, '#')
 
       # Replace sequence-interpretation placehodler back with nothing
       markdown.gsub!(TAG_NOTHING, '')
-
-      # Un-escape Redmine link syntax to wiki pages
-      markdown.gsub!('\[\[', '[[')
-      markdown.gsub!('\]\]', ']]')
 
       # Un-escape Redmine quotation mark "> " that pandoc is not aware of
       markdown.gsub!(/(^|\n)&gt; /, "\n> ")
@@ -184,13 +210,21 @@ module TextileToMarkdown
       markdown.gsub!(/(https?:\/\/\S+)/) { |link| link.gsub(/\\([_#&])/, "\\1") }
 
       # Add newlines around indented fenced blocks to fix in-list code blocks
+      # And restore protected sequences that are restored differently in code blocks
       markdown.gsub!(/^(?'indent1' *)(?'fence'~~~|```)(?'infostr'[^~`\n]*)\n(?'codeblock'(^(?! *\k'fence')[^\n]*\n)*)^(?'indent2' *)\k'fence' *$\n?/m) do
-        if $~[:indent1].empty?
-          $&
+        indent1, fence, infostr, codeblock, indent2 = $~[:indent1], $~[:fence], $~[:infostr], $~[:codeblock], $~[:indent2]
+
+        codeblock.gsub!(/^#{TAG_DASH_SPACE}/, '- ')
+
+        if indent1.empty?
+          "#{fence}#{infostr}\n#{codeblock}#{indent2}#{fence}\n"
         else
-          "\n#{$~[:indent1]}#{$~[:fence]}#{$~[:infostr]}\n#{$~[:codeblock]}#{$~[:indent2]}#{$~[:fence]}\n\n"
+          "\n#{indent1}#{fence}#{infostr}\n#{codeblock}#{indent2}#{fence}\n\n"
         end
       end
+
+      # Restore protected sequences that are restored differently in code blocks
+      markdown.gsub!(/^#{TAG_DASH_SPACE}/, '\\- ')
 
       # restore macros and other protected elements
       markdown.gsub!(/\{\{MDCONVERSION(\w+)\}\}/){ pop_fragment $1 }
