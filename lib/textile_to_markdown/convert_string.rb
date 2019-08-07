@@ -47,9 +47,6 @@ module TextileToMarkdown
     # trailing character has to be a harmless non-word
     TAG_WORD_HTML_ENTITY_SEP = 'pandoc-separate-html-entity.'
 
-    OFFTAGS = /(code|pre|kbd|notextile)/.freeze
-    OFFTAG_MATCH = %r{(?:(</#{OFFTAGS}\b>)|(<#{OFFTAGS}\b[^>]*>))(.*?)(?=</?#{OFFTAGS}\b\W|\Z)}mi.freeze
-
     # not really needed
     def no_textile(text)
       text.gsub!(/(^|\s)==([^=]+.*?)==(\s|$)?/,
@@ -105,6 +102,9 @@ module TextileToMarkdown
       end
       str
     end
+
+    OFFTAGS = /(code|pre|kbd|notextile)/.freeze
+    OFFTAG_MATCH = %r{(?:(</#{OFFTAGS}\b>)|(<#{OFFTAGS}\b[^>]*>))(.*?)(?=</?#{OFFTAGS}\b\W|\Z)}mi.freeze
 
     def rip_offtags(text, escape_aftertag = true, escape_line = true)
       if text =~ /<.*>/
@@ -265,10 +265,10 @@ module TextileToMarkdown
       end
 
       # Move the class from <code> to <pre> and remove <code> so pandoc can generate a code block with correct language
-      textile.gsub!(%r{(<redpre pre (\d+)>\s*)<redpre code (\d+)>(\s*)</code>\s*</pre>}) do
+      # Allow also for swapping closing offtags, which is tolerated by Redmine
+      textile.gsub!(%r{(<redpre pre (\d+)>\s*)<redpre code (\d+)>(\s*)(</code *>\s*</pre *>|</pre *>\s*</code *>)}) do
         pre = $1
-        offcode1 = $2.to_i
-        offcode2 = $3.to_i
+        offcode1, offcode2 = $2.to_i, $3.to_i
         space_after = $4
 
         if @pre_list[offcode2].match(/^<code\b\s+(class="[^"]*")/)
