@@ -18,6 +18,7 @@ module TextileToMarkdown
     def initialize(textile)
       @textile = textile.dup
       @fragments = {}
+      @placeholders = []
     end
 
     def call
@@ -46,6 +47,11 @@ module TextileToMarkdown
     TAG_DASH_SPACE = 'pandoc-protected-dash-space'
     # trailing character has to be a harmless non-word
     TAG_WORD_HTML_ENTITY_SEP = 'pandoc-separate-html-entity.'
+
+    TAG_PH_BEGIN = 'MDCONVERSIONPHxqlrx'
+    TAG_PH_END = 'xEND'
+    PH_RE = "#{TAG_PH_BEGIN}([0-9]+)#{TAG_PH_END}"
+    PH_RE_NOCAP = "#{TAG_PH_BEGIN}[0-9]+#{TAG_PH_END}"
 
     # not really needed
     def no_textile(text)
@@ -168,6 +174,47 @@ module TextileToMarkdown
       end
     end
 
+    QTAGS = [
+      ['**', '*'],
+      ['*'],
+      ['??', '_'],
+      ['-', nil],
+      ['__', '_'],
+      ['_', '_'],
+      ['%', nil],
+      ['+', nil],
+      ['^', nil],
+      ['~', nil]
+    ]
+    QTAGS_JOIN = QTAGS.map {|rc, ht| Regexp::quote rc}.join('|')
+
+    QTAGS.collect! do |rc, newrc|
+      rcq = Regexp::quote rc
+      newrc = rc if newrc.nil?
+      re =
+          /(^|[>\s\(])          # sta
+          (?!\-\-)
+          (#{QTAGS_JOIN}|Bqtag#{PH_RE_NOCAP}Eqtag|)      # oqs
+          (#{rcq})              # qtag
+          ([[:word:]]|[^\s].*?[^\s])    # content
+          (?!\-\-)
+          #{rcq}
+          (#{QTAGS_JOIN}|Bqtag#{PH_RE_NOCAP}Eqtag|)      # oqa
+          (?=[[:punct:]]|<|\s|\)|$)/x
+      [rc, newrc, re]
+    end
+
+    def inline_textile_span(text)
+      QTAGS.each do |qtag_rc, newqtag, qtag_re|
+        text.gsub!(qtag_re) do |m|
+          sta,oqs,qtag,content,oqa = $~[1..6]
+          qtag_ph = make_placeholder(newqtag)
+          "#{sta}#{oqs}Bqtag#{qtag_ph}Eqtag#{content}Bqtag#{qtag_ph}Eqtag#{oqa}"
+        end
+      end
+    end
+
+
     # Preprocess / protect sequences in offtags and @code@ that are treated differently in interpreted code
     def common_code_pre_process(code)
       # allow for unescaping
@@ -184,85 +231,7 @@ module TextileToMarkdown
 
       block_textile_quotes textile
 
-      # temporarily remove redmine macros (and some other stuff thats better
-      # when kept as-is) so they dont get corrupted
-      # update: avoided using spaces in the placeholder macro as it can break certain things
-      textile.gsub!(/^(!?\{\{(.+?)\}\})/m) do
-        all = $1
-        if $2 =~ /\A\s*collapse/
-          # collapse macro should contain textile, so keep it
-          all
-        else
-          "{{MDCONVERSION#{push_fragment(all)}}}"
-        end
-      end
-
-      # https://github.com/tckz/redmine-wiki_graphviz_plugin
-      textile.gsub!(/^(.*\{\{\s*graphviz_me.*)/m) { "{{MDCONVERSION#{push_fragment($1)}}}" }
-
-      # underscores within words get escaped, which causes issues in link detection
-      textile.gsub!(/(?<=\w)(_+)(?=\w)/) { "{{MDCONVERSION#{push_fragment($1)}}}" }
-
-      # more subsequent underscores get misinterpreted, prevent that
-      textile.gsub!(/(_{2,})/) { "{{MDCONVERSION#{push_fragment($1)}}}" }
-
-      # _(...)_, *(...)* etc. get misinterpreted, prevent that
-      textile.gsub!(/(?<!\w)(?'tag'[_+*~-])(?'content'\([^\n]+?\))\k'tag'(?!\w)/) { "#{$~[:tag]}#{TAG_NOTHING}#{$~[:content]}#{TAG_NOTHING}#{$~[:tag]}" }
-
-      # protect wiki links
-      # escape following '(', which might be interpreted as MD link
-      textile.gsub!(/(!?\[\[[^\]\n\|]+(?:\|[^\]\n\|]+)?\]\])(( *\n? *)\()?/m) do
-        wiki_link, parenthesis_after, parenthesis_indent = $1, $2, $3
-        if parenthesis_after.nil?
-          "{{MDCONVERSION#{push_fragment($&)}}}"
-        else
-          escaped = "#{wiki_link}#{parenthesis_indent}\\("
-          "{{MDCONVERSION#{push_fragment(escaped)}}}"
-        end
-      end
-
-      # Redmine support @ inside inline code marked with @ (such as "@git@github.com@"), but not pandoc.
-      # Redmine's inline code also gets html entities interpreted in Textile, but not Markdown
-      # Match inline code in RedCloth3 way and work around these issues.
-      htmlcoder = HTMLEntities.new
-      textile.gsub!(/(?<!\w)@(?:\|(\w+?)\|)?(.+?)@(?!\w)/) do
-        # lang = $1 # lang is ignored even by Redmine
-        code = htmlcoder.decode($2)
-        # sanitize dangerous resulting characters
-        code.gsub!(/[\r\n]/, ' ')
-
-        common_code_pre_process code
-
-        # use placehoder for @
-        "@#{code.gsub(/@/, TAG_AT)}@"
-      end
-
-      # pandoc does not interpret html entities directly following a word, help it
-      textile.gsub!(/(?<=[\w\/])(&(?:#(?:[0-9]+|[Xx][0-9A-Fa-f]+)|[A-Za-z0-9]+);)/, "#{TAG_WORD_HTML_ENTITY_SEP}\\1");
-
-      # Backslash-escaped issue links are ugly and backslash is not necessary
-      textile.gsub!(/(?<!&)#(?=\w)|(?<=[^\W&])#/, TAG_HASH)
-
-      # blocks starting with a leading space are either space-indented lists or code blocks
-      # pandoc treats them diferrently than Redmine, so remove leading spaces and add <pre> tags for non-lists:
-      textile.gsub!(/(\A|\n$\n)^( +)(.+?)(?=\Z|\n$\n)/m) do
-        prefix = $1
-        strip_spaces = $2.length
-        postfix = $4
-        block_start = "\n<pre>"
-        block_end = "\n</pre>"
-        code_block = $3.split("\n").map do |line|
-          line.sub!(/^ {#{strip_spaces}}/, '')
-          block_start = block_end = '' if line =~ /^[*#]+ /
-          line
-        end.join("\n")
-        "#{prefix}#{block_start}\n#{code_block}#{block_end}#{postfix}"
-      end
-
-      # Redmine allows mixing # and * in mixed lists, but not pandoc
-      textile.gsub!(/^[*#]([*#])+ /) do |m|
-        m.gsub(/[*#]/, $1)
-      end
+      ## Code sections
 
       # Move the class from <code> to <pre> and remove <code> so pandoc can generate a code block with correct language
       # Allow also for swapping closing offtags, which is tolerated by Redmine
@@ -293,9 +262,79 @@ module TextileToMarkdown
         code.sub(/^<pre\b(?!\s*class=)/, "<pre class=\"#{TAG_FENCED_CODE_BLOCK}\"")
       end
 
-      # Force <pre> to have a blank line before them
-      # Without this fix, a list of items containing <pre> would not be interpreted as a list at all.
-      textile.gsub!(/^([*#] [^\n]*)(<redpre pre)\b/, "\\1\n\\2")
+
+      # Match inline code in RedCloth3 way and address these issues:
+      # - Redmine support @ inside inline code marked with @ (such as "@git@github.com@"), but not pandoc.
+      # - Redmine's inline code also gets html entities interpreted in Textile, but not in Markdown
+      # - some sequences will be pre/postprocessed in normal text - protect them in code
+      htmlcoder = HTMLEntities.new
+      textile.gsub!(/(?<!\w)@(?:\|(\w+?)\|)?(.+?)@(?!\w)/) do
+        # lang = $1 # lang is ignored even by Redmine
+        code = htmlcoder.decode($2)
+        # sanitize dangerous resulting characters
+        code.gsub!(/[\r\n]/, ' ')
+
+        common_code_pre_process code
+
+        # use placehoder for @
+        "@#{code.gsub(/@/, TAG_AT)}@"
+      end
+
+      ## Redmine-interpreted sequences
+
+      # temporarily remove redmine macros (and some other stuff thats better
+      # when kept as-is) so they dont get corrupted
+      # update: avoided using spaces in the placeholder macro as it can break certain things
+      textile.gsub!(/^(!?\{\{(.+?)\}\})/m) do
+        all = $1
+        if $2 =~ /\A\s*collapse/
+          # collapse macro should contain textile, so keep it
+          all
+        else
+          "{{MDCONVERSION#{push_fragment(all)}}}"
+        end
+      end
+
+      # protect wiki links
+      # escape following '(', which might be interpreted as MD link
+      textile.gsub!(/(!?\[\[[^\]\n\|]+(?:\|[^\]\n\|]+)?\]\])(( *\n? *)\()?/m) do
+        wiki_link, parenthesis_after, parenthesis_indent = $1, $2, $3
+        if parenthesis_after.nil?
+          "{{MDCONVERSION#{push_fragment($&)}}}"
+        else
+          escaped = "#{wiki_link}#{parenthesis_indent}\\("
+          "{{MDCONVERSION#{push_fragment(escaped)}}}"
+        end
+      end
+
+      # https://github.com/tckz/redmine-wiki_graphviz_plugin
+      textile.gsub!(/^(.*\{\{\s*graphviz_me.*)/m) { "{{MDCONVERSION#{push_fragment($1)}}}" }
+
+      # blocks starting with a leading space are either space-indented lists or code blocks
+      # pandoc treats them diferrently than Redmine, so remove leading spaces and add <pre> tags for non-lists:
+      textile.gsub!(/(\A|\n$\n)^( +)(.+?)(?=\Z|\n$\n)/m) do
+        prefix = $1
+        strip_spaces = $2.length
+        postfix = $4
+        block_start = "\n<pre>"
+        block_end = "\n</pre>"
+        code_block = $3.split("\n").map do |line|
+          line.sub!(/^ {#{strip_spaces}}/, '')
+          block_start = block_end = '' if line =~ /^[*#]+ /
+          line
+        end.join("\n")
+        "#{prefix}#{block_start}\n#{code_block}#{block_end}#{postfix}"
+      end
+
+      # redmine allows mixing # and * in mixed lists, but not pandoc
+      # and replace list prefixes for now, as they collide with other syntax
+      textile.gsub!(/^([*#])+ /) do |m|
+        listprefix = $1 * $1.length
+        "list#{make_placeholder(listprefix)} "
+      end
+
+      ## Textile sequences
+
 
       # Drop table colspan/rowspan notation ("|\2." or "|/2.") because pandoc does not support it
       # See https://github.com/jgm/pandoc/issues/22
@@ -313,6 +352,51 @@ module TextileToMarkdown
           "|_. #{header}"
         end
       end
+
+      # Make sure all tables have space in their cells
+      textile.gsub!(/^ *\|([^|\n]*\|)+ *$/) do |row|
+        row.gsub!(/\|([0-9~:_><=^\\]{1,4}\.)?(\s*)(([^|\n])+)/) do
+          mod, lspace, content = $1, $2, $3
+          lspace = ' ' if lspace.empty?
+          content.sub!(/(\S)$/, '\\1 ')
+          "|#{mod}#{lspace}#{content}"
+        end
+        row
+      end
+
+      # make placeholderes from real qtags
+      inline_textile_span textile
+
+      # protect offtag characters that pandoc tend to misinterpret
+      # (has to be done after unindenting)
+      textile.gsub!(/(?<!\|)[*_+]+(?!\|)/) do |m|
+       ".Bany#{make_placeholder(m)}Eany."
+      end
+
+      # parenthesis in qtags get misinterpteted
+      textile.gsub!(/(?<=#{TAG_PH_END}Eqtag)\(|\)(?=Bqtag#{TAG_PH_BEGIN})/) do |m|
+        qtag_ph = ".Bany#{make_placeholder(m)}Eany."
+      end
+
+      # restore real qtags for conversion
+      textile.gsub!(/Bqtag#{PH_RE}Eqtag/) do
+        get_placeholder($1)
+      end
+
+      # restore list prefixes
+      textile.gsub!(/list#{PH_RE}/) do
+        get_placeholder($1)
+      end
+
+      # pandoc does not interpret html entities directly following a word, help it
+      textile.gsub!(/(?<=[\w\/])(&(?:#(?:[0-9]+|[Xx][0-9A-Fa-f]+)|[A-Za-z0-9]+);)/, "#{TAG_WORD_HTML_ENTITY_SEP}\\1");
+
+      # backslash-escaped issue links are ugly and backslash is not necessary
+      textile.gsub!(/(?<!&)#(?=\w)|(?<=[^\W&])#/, TAG_HASH)
+
+      # Force <pre> to have a blank line before them in list
+      # Without this fix, a list of items containing <pre> would not be interpreted as a list at all.
+      textile.gsub!(/^([*#]+ [^\n]*)(<redpre pre)\b/, "\\1\n\\2")
 
       if false
         # update: the following was not obseved with recent pandoc and dashes are not lists in Textile
@@ -392,6 +476,9 @@ module TextileToMarkdown
       # Restore protected sequences that do not differ in code blocks and refular MD
       markdown.gsub!(TAG_AT, '@')
       markdown.gsub!(TAG_HASH, '#')
+      markdown.gsub!(/\.Bany#{PH_RE}Eany\./) do
+        get_placeholder($1)
+      end
 
       # Replace sequence-interpretation placehodler back with nothing
       markdown.gsub!(TAG_NOTHING, '')
@@ -403,10 +490,17 @@ module TextileToMarkdown
 
       ## Restore/unescaping sequences that are protected differently in code blocks
 
-      # Unescape URL that could easily get mangled
-      markdown.gsub!(%r{(https?://\S+)}) { |link| link.gsub(/\\([_#&])/, "\\1") }
+      # remove trailing parenthesis which was incorrectly treated as a part of a link
+      markdown.gsub!(/(\[[^\]^\n]+\]\([^\s)\n]+)\\\)\)/) do |link|
+        "#{$1}))"
+      end
 
-      # Escaped exclamation marks look weird in normal text
+
+      # Unescape URL that could easily get mangled
+      markdown.gsub!(%r{(https?://[^\s)]+)}) { |link| link.gsub(/\\([#&])/, "\\1") }
+
+      # Escaped exclamation marks look weird in normal text and the only special meaning in MD
+      # should be before '['. And Redmine link cancelation works both with ! and \!
       markdown.gsub!(/\\(!)(?!\[)/, '\\1')
 
       # Make use of Redmine's underline syntax (span does not work)
@@ -419,7 +513,6 @@ module TextileToMarkdown
         indent1, fence, infostr, codeblock, indent2 = $~[:indent1], $~[:fence], $~[:infostr], $~[:codeblock], $~[:indent2]
 
         codeblock.gsub!(/^#{TAG_DASH_SPACE}/, '- ')
-        codeblock.gsub!(/#{TAG_EXCLAMATION}/, '!')
 
         if indent1.empty?
           "#{fence}#{infostr}\n#{codeblock}#{indent2}#{fence}\n"
@@ -428,10 +521,13 @@ module TextileToMarkdown
         end
       end
 
-      # Restore protected sequences that were restored differently in code blocks
-      markdown.gsub!(/^#{TAG_DASH_SPACE}/, '\\- ')
+      # restore protected sequences that were restored differently in code blocks
+      markdown.gsub!(/#{TAG_EXCLAMATION}/, '!')
 
-      # restore macros and other protected elements
+      # restore global tags that migh have caused issues if restored earlier
+      markdown.gsub!(/#{TAG_DASH_SPACE}/, '\\- ')
+
+      # restore macro-like protected elements
       markdown.gsub!(/\{\{MDCONVERSION(\w+)\}\}/) { pop_fragment $1 }
 
       expand_blockqutes markdown
@@ -447,6 +543,20 @@ module TextileToMarkdown
 
     def pop_fragment(key)
       @fragments.delete key
+    end
+
+    def make_placeholder(value)
+      key = @placeholders.index(value)
+      if key.nil?
+        key = @placeholders.length
+        @placeholders << value
+      end
+      "#{TAG_PH_BEGIN}#{key}#{TAG_PH_END}"
+    end
+
+    def get_placeholder(key)
+      i = key.to_i
+      @placeholders[i]
     end
 
     def exec_with_timeout(cmd, timeout: 10, stdin:)

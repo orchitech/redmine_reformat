@@ -1,0 +1,21 @@
+h1. Qtags - bold, italic, underlined and similar inline formatting
+
+h2. Special pandoc behavior
+
+Parentheses within qtags should be interpreted as normal text: *(hello)*
+
+h2. Special Redmine behavior
+
++Underlined text+
+_Italic_
+*Bold*
+
+h2. Prevent escaping tags where it can cause issues
+
+My username is joe_average or joe__average or _joe or whatever.
+Friends call me joe_ or whatever.
+
+h2. Ensuring interpreting in tables
+
+|_. Task |_. Description |
+|_this would not be identified as qtags if not spaced_| spaces should be added around table delimiters    |
