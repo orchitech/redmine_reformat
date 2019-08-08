@@ -338,7 +338,7 @@ module TextileToMarkdown
 
       # Drop table colspan/rowspan notation ("|\2." or "|/2.") because pandoc does not support it
       # See https://github.com/jgm/pandoc/issues/22
-      textile.gsub!(%r{\|[/\\]\d\. }, '| ')
+      textile.gsub!(%r{\|[/\\]\d{1,2}\. }, '| ')
 
       # Drop table alignement notation ("|>." or "|<." or "|=.") because pandoc does not support it
       # See https://github.com/jgm/pandoc/issues/22
@@ -355,7 +355,7 @@ module TextileToMarkdown
 
       # Make sure all tables have space in their cells
       textile.gsub!(/^ *\|([^|\n]*\|)+ *$/) do |row|
-        row.gsub!(/\|([0-9~:_><=^\\]{1,4}\.)?(\s*)(([^|\n])+)/) do
+        row.gsub!(/\|([0-9~:_><=^\\\/]{1,4}\.)?(\s*)(([^|\n])+)/) do
           mod, lspace, content = $1, $2, $3
           lspace = ' ' if lspace.empty?
           content.sub!(/(\S)$/, '\\1 ')
