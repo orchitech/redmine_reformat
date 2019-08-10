@@ -1,0 +1,40 @@
+# graphviz test
+
+Lorem ipsum.
+
+{{graphviz_link()
+
+digraph "title here" {
+  size="9,6";
+  compound=true;
+  ranksep=0.55;
+  nodesep=0.25;
+  rankdir=LR;
+  label="title here";
+  labelloc=t;
+  fontsize=12;
+
+  edge [fontsize=10,penwidth=0.5,arrowsize=0.75]
+  node [fontsize=12]
+
+  /* --------------------- */
+  node [shape=box,color=black]
+
+  /* ---- more stuff here ---- */
+  ASD [label="ASD\n(lorem)"]
+
+}
+
+}}
+
+# Collapse macro
+
+{{collapse(view more)
+
+Foo
+
+  - [[Bar {baz}]]
+
+Lorem ipsum
+
+}}

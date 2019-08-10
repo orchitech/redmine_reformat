@@ -1,3 +1,5 @@
+h1. Standard tables
+
 Paragraph Lorem ipsum
 
 |a1|a2|a3|
@@ -9,4 +11,16 @@ Paragraph Lorem ipsum
 |b1  | b2| |
 |c1|  | c2|
 
-lalalala
+h1. Table with guessed header
+
+|* a1 *| *a2* | *a3*|*a4* |
+|b1  | b2| | |
+|c1|  | c2| |
+
+
+h1. Table with protected pipe chars
+
+|_. a1   |_. a2 |
+| &#124; | pipe in code: @|@  |
+| true<notextile> | </notextile>false | c2 |
+| d1 | also <code>pipe | in code</code> |

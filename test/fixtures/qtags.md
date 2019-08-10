@@ -4,6 +4,8 @@
 
 Parentheses within qtags should be interpreted as normal text: **(hello)**
 
+Pandoc is fragile about dashes in strikeout text: ~~this should - be (?) striked-out~~
+
 ## Special Redmine behavior
 
 _Underlined text_  

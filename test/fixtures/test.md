@@ -24,7 +24,7 @@ echo "OK"
 
 ## Quotations are preserved
 
-> I'll be back\! Ha\! You didn't know I was gonna say that, did you?
+> I'll be back! Ha! You didn't know I was gonna say that, did you?
 
 ## XML tags are preserved
 
@@ -57,22 +57,22 @@ http://example.com/example_site/#test
 | two                     |                   |
 | Right-aligned cell      | Left-aligned cell |
 
-## List with code block is partially supported
+## List with code block is ~~partially~~ supported
 
 The numbering will be reset after each code block, but layout is preserved:
 
 1.  first item:
 
-``` sql
-SELECT * FROM table;
-```
+    ``` sql
+    SELECT * FROM table;
+    ```
 
-1.  second item:
+2.  second item:
 
-```
-rm -rf /tmp/*
-```
+    ```
+    rm -rf /tmp/*
+    ```
 
-1.  final item
+3.  final item
 
 But some more complex case might result in broken list layout.

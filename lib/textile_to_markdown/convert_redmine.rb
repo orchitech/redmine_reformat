@@ -130,18 +130,22 @@ module TextileToMarkdown
     BATCHSIZE = 1000
     def pluck_each(scope, attribute, &block)
       all = scope.count
-      scope = scope.where.not(attribute => nil)
-      puts "#{scope.table_name}: #{scope.count} of #{all}"
+      scope = scope.where.not(attribute => [nil, ''])
+      notnull = scope.count
+      puts "#{scope.table_name}: converting #{notnull} non-blank #{attribute} occurences of #{all} total"
       scope = scope.reorder(id: :asc).limit(BATCHSIZE)
 
       rows = scope.pluck(:id, attribute)
+      finished = 0
       while rows.any?
         row_count = rows.size
         offset = rows.last[0]
 
         rows.each{|r| yield r}
+        finished += row_count
 
         break if row_count < BATCHSIZE
+        puts "#{scope.table_name}: finished #{finished} of #{notnull}"
         rows = scope.where("id > ?", offset).pluck(:id, attribute)
       end
     end

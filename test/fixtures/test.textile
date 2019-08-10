@@ -53,7 +53,7 @@ h2. Unsupported cell formatting is dropped silently
 | two |
 |>. Right-aligned cell|<. Left-aligned cell|
 
-h2. List with code block is partially supported
+h2. List with code block is -partially- supported
 
 The numbering will be reset after each code block, but layout is preserved:
 

@@ -34,7 +34,7 @@ lists
   - [[Didum {stfoo}]]
       - ddddd
 
-_(old [[stfoo - ABC]])_
+*(old [[stfoo - ABC]])*
 
 ## The Lorem ipsum (ABC) for wtf
 
