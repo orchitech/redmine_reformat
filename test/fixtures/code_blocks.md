@@ -12,9 +12,25 @@ Next paragraph starts here.
     this should be glued to the list  
     even this  
     and this  
-    last glued line  
-    a new code block begins  
-    and another one
+    last glued line
+
+Reset paragraphs.
+
+```
+a new code block begins
+```
+
+```
+and another one
+```
+
+Make sure fenced blocks are used:
+
+```
+pre block
+```
+
+Make sure fenced blocks are used:
 
 ```
 pre block

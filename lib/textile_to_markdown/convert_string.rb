@@ -12,12 +12,13 @@ require 'textile_to_markdown/markdown-table-formatter/table-formatter'
 module TextileToMarkdown
   class ConvertString
     # receives textile, returns markdown
-    def self.call(textile)
-      new(textile).call
+    def self.call(textile, reference = nil)
+      new(textile, reference).call
     end
 
-    def initialize(textile)
+    def initialize(textile, reference = nil)
       @textile = textile.dup
+      @reference = reference
       @fragments = {}
       @placeholders = []
     end
@@ -297,25 +298,41 @@ module TextileToMarkdown
       @pre_list = []
       rip_offtags textile, false, false
 
-      escape_html_tags textile
-
       # pandoc does not create fenced code blocks when there is leading whitespace
       textile.gsub!(/^[[:blank:]]+(?=<redpre pre\b)/, '')
 
       # Move the class from <code> to <pre> and remove <code> so pandoc can generate a code block with correct language
       # Allow also for swapping closing offtags, which is tolerated by Redmine
-      textile.gsub!(%r{(<redpre pre (\d+)>\s*)<redpre code (\d+)>(\s*)(</code *>\s*</pre *>|</pre *>\s*</code *>)}) do
-        pre = $1
-        offcode1, offcode2 = $2.to_i, $3.to_i
-        space_after = $4
+      textile.gsub!(
+        %r{
+          (?<preopen><redpre[ ]pre[ ](?<offcode1>\d+)>\s*)
+          (?<codeopen><redpre[ ]code[ ](?<offcode2>\d+)>)?
+          (?<out>.*?)
+          (?<preclose>
+            (?<codeclose1></code[ ]*>)?
+            \s*
+            </pre[ ]*>
+            (?<spacepastpreclose>\s*)
+            (?<codeclose2></code[ ]*>)?
+            |\Z
+          )
+        }xm) do
+        md = $~
+        codeclose2 = md[:codeclose2]
+        codeclose2 = nil if md[:codeopen] and md[:codeclose1].nil?
 
-        if @pre_list[offcode2].match(/^<code\b\s+(class="[^"]*")/)
-          @pre_list[offcode1] = @pre_list[offcode2].sub(/^<code\b/, '<pre')
-        else
-          @pre_list[offcode1] = @pre_list[offcode2].sub(/^<code\b/, "<pre class=\"#{TAG_FENCED_CODE_BLOCK}\"")
+        offcode1 = md[:offcode1].to_i
+        offcode = if md[:offcode2] then md[:offcode2].to_i else offcode1 end
+
+        @pre_list[offcode1] = @pre_list[offcode].sub(/^<(?:code|pre)\b(\s+class="[^"]+")?/) do
+          preparam = if $1 then $1 else " class=\"#{TAG_FENCED_CODE_BLOCK}\"" end
+          "<pre#{preparam}"
         end
-        "#{pre}#{space_after}</pre>"
+        @pre_list[offcode1] += md[:out] unless md[:out].empty?
+        "#{md[:preopen]}</pre>#{codeclose2}#{md[:spacepastpreclose]}"
       end
+
+      escape_html_tags textile
 
       # make sure that empty lines mean new block
       glue_indented_continuations textile
@@ -329,31 +346,27 @@ module TextileToMarkdown
         prefix = $1
         strip_spaces = $2.length
         postfix = $4
-        block_start = "\n<pre class=\"#{TAG_FENCED_CODE_BLOCK}\">"
-        block_end = "\n</pre>"
+        list = false
         code_block = $3.split("\n").map do |line|
           line.sub!(/^ {#{strip_spaces}}/, '')
-          block_start = block_end = '' if line =~ /^[*#]+ /
+          list = true if line =~ /^[*#]+ /
           line
         end.join("\n")
-        "#{prefix}#{block_start}\n#{code_block}#{block_end}#{postfix}"
+        if list
+          "#{prefix}\n#{code_block}#{postfix}"
+        else
+          @pre_list << "<pre class=\"#{TAG_FENCED_CODE_BLOCK}\">\n#{code_block}\n"
+          "#{prefix}\n<redpre pre #{@pre_list.length - 1}></pre>#{postfix}"
+        end
+        
       end
-
-      # again
-      rip_offtags textile, false, false
 
       # Preprocess non-interpreted sections for latter postprocessing
       # Placeholders can be protected here
       @pre_list.map! do |code|
         code = code.dup
         common_code_pre_process code
-
-        # Inject a class in all <pre> that do not have a blank line before them
-        # This is to force pandoc to use fenced code block (```) otherwise it would
-        # use indented code block and would very likely need to insert an empty HTML
-        # comment "<!-- -->" (see http://pandoc.org/README.html#ending-a-list)
-        # which are unfortunately not supported by Redmine (see http://www.redmine.org/issues/20497)
-        code.sub(/^<pre\b(?!\s*class=)/, "<pre class=\"#{TAG_FENCED_CODE_BLOCK}\"")
+        code
       end
 
 
@@ -653,6 +666,7 @@ module TextileToMarkdown
           table = MarkdownTableFormatter.new(table).to_md
         rescue
           # keep it as it is
+          STDERR.puts("[WARNING] #{@reference} - reformatting MD table failed")
         end
         table
       end
@@ -668,6 +682,10 @@ module TextileToMarkdown
       markdown.gsub!(/\{\{MDCONVERSION(\w+)\}\}/) { pop_fragment $1 }
 
       expand_blockqutes markdown
+
+      if markdown =~ /MDCONVERSION|#{TAG_PH_BEGIN}|#{TAG_PH_END}|pandoc-/
+        STDERR.puts("[WARNING] #{@reference} - a placeholder likely leaked to the output MD")
+      end
 
       markdown
     end
@@ -711,7 +729,7 @@ module TextileToMarkdown
       rescue Timeout::Error
         Process.kill(-9, pid)
         Process.detach(pid)
-        puts 'timeout'
+        STDERR.puts 'timeout'
       end
 
       result

@@ -14,13 +14,21 @@ even this
  and this
 last glued line
 
+Reset paragraphs.
+
  a new code block begins
 
  and another one
 
+Make sure fenced blocks are used:
 <pre>
 pre block
 </pre>
+
+Make sure fenced blocks are used:
+<pre><code>
+pre block
+</code></pre>
 
  indented code blocks should be supressed directly after block
  

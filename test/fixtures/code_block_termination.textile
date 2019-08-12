@@ -1,0 +1,23 @@
+h1. Correct code
+
+<pre><code class="ruby">
+puts "clear skies"
+puts "but users rely on Redmine to make them clear"
+</code></pre>
+
+h1. Unbalanced tags - @</pre>@ before @</code>@
+
+<pre><code class="ruby">
+puts "users often close pre before code"
+</pre></code>
+
+h1. Unclosed @</code>@ tag
+
+<pre><code class="ruby">
+puts "why bother to close code when I close the outter pre?"
+</pre>
+
+h1. Termination by end of file @</pre>@
+
+<pre><code class="ruby">
+puts "someone's life is too short for writing ending tags at the end of text"

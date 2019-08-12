@@ -57,7 +57,7 @@ module TextileToMarkdown
 
     def migrate_setting(name)
       if textile = Setting.send(name)
-        if md = convert(textile)
+        if md = convert(textile, "Setting\##{name}")
           Setting.send "#{name}=", md
         else
           puts "failed to convert setting #{name}"
@@ -69,20 +69,20 @@ module TextileToMarkdown
       ITEMS_TO_MIGRATE.each do |clazz, attribute|
         name = clazz.name
         pluck_each clazz, attribute do |id, value|
-          if md = convert(value)
+          if md = convert(value, "#{name}\##{id}.#{attribute}")
             clazz.where(id: id).update_all(attribute => md)
           else
-            puts "failed to convert #{name} #{object.id}"
+            STDERR.puts "failed to convert #{name}\##{id}"
           end
         end
       end
     end
 
     def migrate_wiki_versions
-      puts "Wiki versions: #{WikiContent::Version.count}"
+      STDERR.puts "Wiki versions: #{WikiContent::Version.count}"
       WikiContent::Version.find_each do |version|
         if textile = version.text
-          if md = convert(textile)
+          if md = convert(textile, "WikiContent::Version\##{version.id}")
             if version.compression == 'gzip'
               md = Zlib::Deflate.deflate(md, Zlib::BEST_COMPRESSION)
             end
@@ -145,14 +145,14 @@ module TextileToMarkdown
         finished += row_count
 
         break if row_count < BATCHSIZE
-        puts "#{scope.table_name}: finished #{finished} of #{notnull}"
+        STDERR.puts "#{scope.table_name}: finished #{finished} of #{notnull}"
         rows = scope.where("id > ?", offset).pluck(:id, attribute)
       end
     end
 
 
-    def convert(textile)
-      ConvertString.(textile) if textile
+    def convert(textile, reference = nil)
+      ConvertString.(textile, reference) if textile
     end
   end
 end

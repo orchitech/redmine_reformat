@@ -38,7 +38,7 @@ failed = 0
 succeeded = 0
 Dir.glob("#{test_pattern}.textile").each do |textile|
   md = textile.sub(/(\.textile)?$/, '.md')
-  md = '/dev/null' unless File.exists?(md)
+  md = '/dev/null' unless overwrite or File.exists?(md)
   name = textile.sub(/\.textile$/, '')
 
   input = File.read(textile)
@@ -51,7 +51,7 @@ Dir.glob("#{test_pattern}.textile").each do |textile|
 
       STDERR.puts "#{name}: TEST FAILED!"
       STDERR.flush
-      puts `colordiff #{md} #{a}`
+      puts `colordiff -u #{md} #{a}`
       STDOUT.flush
       failed += 1
     else
