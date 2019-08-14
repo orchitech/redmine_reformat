@@ -39,6 +39,7 @@ module TextileToMarkdown
         Mailer.with_deliveries(false) do
           migrate_settings
           migrate_objects
+          migrate_issue_description_journals
           migrate_wiki_versions
           migrate_custom_values
           Setting.text_formatting = 'markdown'
@@ -49,7 +50,7 @@ module TextileToMarkdown
     private
 
     def migrate_settings
-      puts "Settings"
+      STDERR.puts "Settings"
       SETTINGS_TO_MIGRATE.each do |setting|
         migrate_setting setting
       end
@@ -60,7 +61,7 @@ module TextileToMarkdown
         if md = convert(textile, "Setting\##{name}")
           Setting.send "#{name}=", md
         else
-          puts "failed to convert setting #{name}"
+          STDERR.puts "failed to convert setting #{name}"
         end
       end
     end
@@ -78,6 +79,24 @@ module TextileToMarkdown
       end
     end
 
+    def migrate_issue_description_journals
+      scope = JournalDetail.joins(:journal).where(
+        property: 'attr', prop_key: 'description', journals: { journalized_type: 'Issue' }
+      )
+      STDERR.puts "JournalDetails (Issue.description): #{scope.count} records"
+      scope.pluck(:id, :value, :old_value).each do |id, value, old_value|
+        if value and md = convert(value)
+          value = md
+        end
+        if old_value and md = convert(old_value)
+          old_value = md
+        end
+        JournalDetail.where(id: id).update_all(
+          value: value, old_value: old_value
+        )
+      end
+    end
+
     def migrate_wiki_versions
       STDERR.puts "Wiki versions: #{WikiContent::Version.count}"
       WikiContent::Version.find_each do |version|
@@ -88,7 +107,7 @@ module TextileToMarkdown
             end
             version.update_column :data, md
           else
-            puts "failed to convert wiki version #{version.id}"
+            STDERR.puts "failed to convert wiki version #{version.id}"
           end
         end
       end
@@ -96,14 +115,14 @@ module TextileToMarkdown
 
     # convert custom values where applicable
     def migrate_custom_values
-      puts "Custom values"
+      STDERR.puts "Custom values"
       CustomField.all.to_a.select{|cf|cf.text_formatting == 'full'}.each do |cf|
         print "custom field #{cf.name} (#{cf.custom_values.count} values) "
         pluck_each(cf.custom_values, :value) do |id, value|
           if md = convert(value)
             CustomValue.where(id: id).update_all(value: md)
           else
-            puts "failed to convert custom_value #{custom_value.id}"
+            STDERR.puts "failed to convert custom_value #{custom_value.id}"
           end
         end
       end
@@ -111,7 +130,7 @@ module TextileToMarkdown
       # journal details for formatted custom fields
       IssueCustomField.all.to_a.select{|cf|cf.text_formatting == 'full'}.each do |cf|
         scope = JournalDetail.where(property: 'cf', prop_key: cf.id)
-        puts "JournalDetails (#{cf.name}): #{scope.count} records"
+        STDERR.puts "JournalDetails (#{cf.name}): #{scope.count} records"
         scope.pluck(:id, :value, :old_value).each do |id, value, old_value|
           if md = convert(value)
             value = md
@@ -132,7 +151,7 @@ module TextileToMarkdown
       all = scope.count
       scope = scope.where.not(attribute => [nil, ''])
       notnull = scope.count
-      puts "#{scope.table_name}: converting #{notnull} non-blank #{attribute} occurences of #{all} total"
+      STDERR.puts "#{scope.table_name}: converting #{notnull} non-blank #{attribute} occurences of #{all} total"
       scope = scope.reorder(id: :asc).limit(BATCHSIZE)
 
       rows = scope.pluck(:id, attribute)
@@ -152,7 +171,11 @@ module TextileToMarkdown
 
 
     def convert(textile, reference = nil)
-      ConvertString.(textile, reference) if textile
+      md = textile
+      md = ConvertString.(md, reference) if md
+      # browsers use \r\n, so restore it to avoid EOL differences
+      md = md.gsub(/\r?\n/m, "\r\n") if md
+      md
     end
   end
 end
