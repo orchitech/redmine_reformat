@@ -1,0 +1,32 @@
+h1. Code tests
+
+h2. Inline code using @
+
+@my code@
+E-mail works: @joe@example.com@
+@a tag:&lt;&gt;@
+
+h2. Backticks preffered over code tag
+
+<code>should be backtick</code>
+<code>a tag:&lt;&gt;</code>
+<code>  surrounding whitespace eaten </code>
+No issue with many ats: <code>@joe@example.com@</code>
+No issue with pipe: <code>joe|average</code>
+No issue with backtick: <code>echo `date`</code>
+This is lossy: <code class="ruby">puts "Backticks are great, but code class is lost"</code>
+
+h2. Where code tag still has to be used...
+
+Tables:
+
+|_. table                   |
+| <code>no|backticks</code> |
+| @no|backticks@            |
+| <code>backticks</code>    |
+
+
+New line: <code class="taskpaper">joe
+average</code>
+
+Empty code: <code> </code>

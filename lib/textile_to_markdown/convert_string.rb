@@ -551,10 +551,26 @@ module TextileToMarkdown
       # textile.gsub!(/^ *([^#].*?)\n(#+ )/m, "\\1\n\n\\2")
       # textile.gsub!(/^ *([^*].*?)\n(\*+ )/m, "\\1\n\n\\2")
 
-      # Symbols that are interpreted as regular a word
-      # Relying that hey are not used in a special context
+      # Symbols that are interpreted as a regular word
+      # Relying on that they are not used in a special context
       textile.gsub!(/\([cC]\)/) do |m|
         "Bword#{make_placeholder(m)}Eword"
+      end
+
+      # Prefer inline code using backtics over code
+      textile.gsub!(/<redpre code (\d+)>\s*<\/code>/) do |m|
+        code = @pre_list[$1.to_i].sub(/^<code\b[^>]*>/, '')
+        code.strip!
+        if code.empty? or code =~ /\n|#{escpipeph}/
+          # cannot convert to @
+          m
+        else
+          code = htmlcoder.decode(code)
+          # sanitize dangerous resulting characters
+          code.gsub!(/[\r\n]/, ' ')
+          # use placehoder for @
+          "@#{code.gsub(/@/, TAG_AT)}@"
+        end
       end
 
       smooth_offtags textile
