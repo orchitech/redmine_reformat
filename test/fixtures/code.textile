@@ -5,6 +5,8 @@ h2. Inline code using @
 @my code@
 E-mail works: @joe@example.com@
 @a tag:&lt;&gt;@
+No issue with backtick: @echo `date`@
+Recognizing ats when tightly surrounded: (@STARTED@/@FINISHED@)
 
 h2. Backticks preffered over code tag
 
@@ -30,3 +32,8 @@ New line: <code class="taskpaper">joe
 average</code>
 
 Empty code: <code> </code>
+
+h2. Collisions
+
+* block sequence with @at
+* sould not win over @inline code@

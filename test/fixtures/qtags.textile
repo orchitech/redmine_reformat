@@ -11,8 +11,9 @@ h2. Special Redmine behavior
 +Underlined text+
 _Italic_
 *Bold*
+ *[[WikiLink]]*
 
-h2. Prevent escaping tags where it can cause issues
+h2. Prevent escaping in-word dashes
 
 My username is joe_average or joe__average or _joe or whatever.
 Friends call me joe_ or whatever.

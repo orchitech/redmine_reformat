@@ -42,14 +42,20 @@ module TextileToMarkdown
 
     private
 
-    TAG_AT = 'pandoc-protected-at-sign'
-    TAG_HASH = 'pandoc-protected-hash-sign'
-    TAG_EXCLAMATION = 'pandoc-protected-exclamation-mark'
-    TAG_FENCED_CODE_BLOCK = 'force-pandoc-to-ouput-fenced-code-block'
-    TAG_NOTHING = 'pandoc-nothing-will-be-here'
-    TAG_DASH_SPACE = 'pandoc-protected-dash-space'
-    # trailing character has to be a harmless non-word
-    TAG_WORD_HTML_ENTITY_SEP = 'pandoc-separate-html-entity.'
+    TAG_AT = 'pandocIprotectedIatIsign'
+    TAG_HASH = 'pandocIprotectedIhashIsign'
+    TAG_EXCLAMATION = 'pandocIprotectedIexclamationImark'
+    TAG_FENCED_CODE_BLOCK = 'forceIpandocItoIouputIfencedIcodeIblock'
+
+    TAG_NOTHING = 'pandocInothingIwillIbeIhere'
+    TAG_WORD_SEP = '.pandocIwordIseparatorIdoubleIsided.'
+    TAG_WORD_SEP_LEFT = '.pandocIwordIseparatorIleft'
+    TAG_WORD_SEP_RIGHT = 'pandocIwordIseparatorIright.'
+    TAG_TO_EMPTY_RE = [
+      TAG_NOTHING, TAG_WORD_SEP, TAG_WORD_SEP_LEFT, TAG_WORD_SEP_RIGHT
+    ].map {|ph| Regexp::quote ph}.join('|')
+
+    TAG_DASH_SPACE = 'pandocIprotectedIdashIspace'
 
     TAG_PH_BEGIN = 'MDCONVERSIONPHxqlrx'
     TAG_PH_END = 'xEND'
@@ -268,8 +274,10 @@ module TextileToMarkdown
 
     # Preprocess / protect sequences in offtags and @code@ that are treated differently in interpreted code
     def common_code_pre_process(code)
-      # allow for unescaping
-      code.gsub!(/!/, TAG_EXCLAMATION)
+      # allow for escaping/unescaping these characters in special contexts
+      code.gsub!(/[!+_*-]/) do |m|
+        "Bword#{make_placeholder(m)}Eword"
+      end
     end
 
     def pre_process_textile(textile)
@@ -369,23 +377,35 @@ module TextileToMarkdown
         code
       end
 
-
       # Match inline code in RedCloth3 way and address these issues:
       # - Redmine support @ inside inline code marked with @ (such as "@git@github.com@"), but not pandoc.
       # - Redmine's inline code also gets html entities interpreted in Textile, but not in Markdown
       # - some sequences will be pre/postprocessed in normal text - protect them in code
       htmlcoder = HTMLEntities.new
+      atph = "Bat#{make_placeholder('@')}Eat"
       textile.gsub!(/(?<!\w)@(?:\|(\w+?)\|)?(.+?)@(?!\w)/) do
         # lang = $1 # lang is ignored even by Redmine
         code = htmlcoder.decode($2)
         # sanitize dangerous resulting characters
         code.gsub!(/[\r\n]/, ' ')
 
-        common_code_pre_process code
+        # tighten the code span
+        lspace = rspace = ''
+        code.match(/^\s+/) {|s| lspace = s}
+        code.match(/\s+$/) {|s| rspace = s}
+        code.strip!
 
-        # use placehoder for @
-        "@#{code.gsub(/@/, TAG_AT)}@"
+        if code.empty?
+          "#{lspace}#{rspace}"
+        else
+          common_code_pre_process code
+          # mark @code@ usages first
+          "#{lspace}#{TAG_WORD_SEP_RIGHT}#{atph}#{code}#{atph}#{TAG_WORD_SEP_LEFT}#{rspace}"
+        end
       end
+
+      textile.gsub!(/@/, TAG_AT)    # all @ that do not demark code
+      textile.gsub!(/#{atph}/, '@') # @ that demark code
 
       ## Redmine-interpreted sequences
 
@@ -496,14 +516,24 @@ module TextileToMarkdown
       # make placeholderes from real qtags
       inline_textile_span textile
 
-      # protect offtag characters that pandoc tend to misinterpret
+      # protect qtag characters that pandoc tend to misinterpret
       # (has to be done after unindenting)
-      textile.gsub!(/(?<!\|)[*_+]+(?!\|)/) do |m|
-       ".Bany#{make_placeholder(m)}Eany."
+      textile.gsub!(/(?<!\|)[*_+-](?!\|)/) do |m|
+        out = m
+        flavour = case m
+          when '+', '-'
+            'escatstart'
+          when '_'
+            'escoutword'
+          else
+            out = "\\#{m}"
+            'any'
+          end
+       ".B#{flavour}#{make_placeholder(out)}E#{flavour}."
       end
 
-      # parenthesis in qtags get misinterpteted
-      textile.gsub!(/(?<=#{TAG_PH_END}Eqtag)\(|\)(?=Bqtag#{TAG_PH_BEGIN})/) do |m|
+      # parenthesis and curly brackets in qtags get misinterpteted
+      textile.gsub!(/(?<=#{TAG_PH_END}Eqtag)[{(]|[})](?=Bqtag#{TAG_PH_BEGIN})/) do |m|
         qtag_ph = ".Bany#{make_placeholder(m)}Eany."
       end
 
@@ -518,7 +548,7 @@ module TextileToMarkdown
       end
 
       # pandoc does not interpret html entities directly following a word, help it
-      textile.gsub!(/(?<=[\w\/])(&(?:#(?:[0-9]+|[Xx][0-9A-Fa-f]+)|[A-Za-z0-9]+);)/, "#{TAG_WORD_HTML_ENTITY_SEP}\\1");
+      textile.gsub!(/(?<=[\w\/])(&(?:#(?:[0-9]+|[Xx][0-9A-Fa-f]+)|[A-Za-z0-9]+);)/, "#{TAG_WORD_SEP_RIGHT}\\1");
 
       # backslash-escaped issue links are ugly and backslash is not necessary
       textile.gsub!(/(?<!&)#(?=\w)|(?<=[^\W&])#/, TAG_HASH)
@@ -543,7 +573,8 @@ module TextileToMarkdown
         textile.gsub!(/^(\s*)-(\s+[^-])/, "\\1*\\2")
       else
         # but these lines make pandoc add extra paragraphs, prevent it
-        textile.gsub!(/^- /, TAG_DASH_SPACE)
+        ## TODO: addressed by qtag escaping?
+        ## textile.gsub!(/^- /, TAG_DASH_SPACE)
       end
 
       # add new lines before lists - commented out, as this can break subsequent lists and
@@ -557,7 +588,7 @@ module TextileToMarkdown
         "Bword#{make_placeholder(m)}Eword"
       end
 
-      # Prefer inline code using backtics over code
+      # Prefer inline code using backtics over code html tag (code is already protected as an offtag)
       textile.gsub!(/<redpre code (\d+)>\s*<\/code>/) do |m|
         code = @pre_list[$1.to_i].sub(/^<code\b[^>]*>/, '')
         code.strip!
@@ -569,7 +600,7 @@ module TextileToMarkdown
           # sanitize dangerous resulting characters
           code.gsub!(/[\r\n]/, ' ')
           # use placehoder for @
-          "@#{code.gsub(/@/, TAG_AT)}@"
+          "#{TAG_WORD_SEP_RIGHT}@#{code.gsub(/@/, TAG_AT)}@#{TAG_WORD_SEP_LEFT}"
         end
       end
 
@@ -615,11 +646,13 @@ module TextileToMarkdown
     end
 
     def post_process_markdown(markdown)
+      # Reclaim known placeholder sparations
+      markdown.gsub!(/\.(?<ph>B(?<flavour>any|escatstart|escoutword)#{PH_RE}E\k<flavour>)(?<mis2>[)])\./) do
+        ".#{$~[:ph]}.#{$~[:mis2]}"
+      end
+
       # Remove the \ pandoc puts before * and > at begining of lines
       markdown.gsub!(/^((\\[*>])+)/) { $1.gsub("\\", "") }
-
-      # Add a blank line before lists
-      markdown.gsub!(/^([^*].*)\n\*/, "\\1\n\n*")
 
       # Remove the injected tag
       markdown.gsub!(' ' + TAG_FENCED_CODE_BLOCK, '')
@@ -627,20 +660,31 @@ module TextileToMarkdown
       # Restore protected sequences that do not differ in code blocks and regular MD
       markdown.gsub!(TAG_AT, '@')
       markdown.gsub!(TAG_HASH, '#')
+      markdown.gsub!(TAG_EXCLAMATION, '!')
+
       markdown.gsub!(/\.Bany#{PH_RE}Eany\./) do
         get_placeholder($1)
       end
       markdown.gsub!(/Bword#{PH_RE}Eword/) do
         get_placeholder($1)
       end
+      markdown.gsub!(/(^[[:blank:]]+)?\.Bescatstart#{PH_RE}Eescatstart\./) do
+        esc = if $1.nil? then '' else '\\' end
+        "#{$1}#{esc}#{get_placeholder($2)}"
+      end
+      markdown.gsub!(/(?<=\w)\.Bescoutword#{PH_RE}Eescoutword\.(?=\w)/) do
+        get_placeholder($1)
+      end
+      markdown.gsub!(/\.Bescoutword#{PH_RE}Eescoutword\./) do
+        "\\#{get_placeholder($1)}"
+      end
 
       # Replace sequence-interpretation placehodler back with nothing
-      markdown.gsub!(TAG_NOTHING, '')
-      markdown.gsub!(TAG_WORD_HTML_ENTITY_SEP, '')
+      markdown.gsub!(/#{TAG_TO_EMPTY_RE}/, '')
  
-      # Remove <!-- end list --> injected by pandoc because Redmine incorrectly
+      # Replace <!-- end list --> injected by pandoc because Redmine incorrectly
       # does not supported HTML comments: http://www.redmine.org/issues/20497
-      markdown.gsub!(/\n\n<!-- end list -->\n/, "\n")
+      markdown.gsub!(/\n\n<!-- end list -->\n/, "\n\n&#31;\n")
 
       ## Restore/unescaping sequences that are protected differently in code blocks
 
@@ -666,7 +710,8 @@ module TextileToMarkdown
       markdown.gsub!(/^(?'indent1' *)(?'fence'~~~|```)(?'infostr'[^~`\n]*)\n(?'codeblock'(^(?! *\k'fence')[^\n]*\n)*)^(?'indent2' *)\k'fence' *$\n?/m) do
         indent1, fence, infostr, codeblock, indent2 = $~[:indent1], $~[:fence], $~[:infostr], $~[:codeblock], $~[:indent2]
 
-        codeblock.gsub!(/^#{TAG_DASH_SPACE}/, '- ')
+        ## TODO - adressed by qtag escaping?
+        ## codeblock.gsub!(/^#{TAG_DASH_SPACE}/, '- ')
         # make codeblocks easily distinguishable from tables
         codeblock.gsub!(/^/, TAG_NOTHING)
 
@@ -689,17 +734,17 @@ module TextileToMarkdown
       markdown.gsub!(/#{TAG_NOTHING}/, '')
 
       # restore protected sequences that were restored differently in code blocks
-      markdown.gsub!(/#{TAG_EXCLAMATION}/, '!')
 
       # restore global tags that migh have caused issues if restored earlier
-      markdown.gsub!(/#{TAG_DASH_SPACE}/, '\\- ')
+      ## TODO not needed?
+      ## markdown.gsub!(/#{TAG_DASH_SPACE}/, '\\- ')
 
       # restore macro-like protected elements
       markdown.gsub!(/\{\{MDCONVERSION(\w+)\}\}/) { pop_fragment $1 }
 
       expand_blockqutes markdown
 
-      if markdown =~ /MDCONVERSION|#{TAG_PH_BEGIN}|#{TAG_PH_END}|pandoc-/
+      if markdown =~ /MDCONVERSION|#{TAG_PH_BEGIN}|#{TAG_PH_END}|pandocI|<redpre/
         STDERR.puts("[WARNING] #{@reference} - a placeholder likely leaked to the output MD")
       end
 

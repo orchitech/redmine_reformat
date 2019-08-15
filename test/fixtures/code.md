@@ -4,7 +4,9 @@
 
 `my code`  
 E-mail works: `joe@example.com`  
-`a tag:<>`
+`a tag:<>`  
+No issue with backtick: `` echo `date` ``  
+Recognizing ats when tightly surrounded: (`STARTED`/`FINISHED`)
 
 ## Backticks preffered over code tag
 
@@ -30,3 +32,8 @@ New line: <code class="taskpaper">joe
 average</code>
 
 Empty code: <code> </code>
+
+## Collisions
+
+  - block sequence with @at
+  - sould not win over `inline code`

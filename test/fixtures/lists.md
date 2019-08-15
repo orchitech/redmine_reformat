@@ -3,6 +3,8 @@ lists
 1.  numberedList
     1.  indented
 
+&#31;
+
   - bulletlist
       - indented
   - bullet 2
@@ -39,6 +41,8 @@ lists
 ## The Lorem ipsum (ABC) for wtf
 
   - [[table top - ABC]]
+
+&#31;
 
   - [[Components {blk}]]
       - individual items

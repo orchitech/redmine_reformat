@@ -9,14 +9,14 @@ Pandoc is fragile about dashes in strikeout text: ~~this should - be (?) striked
 ## Special Redmine behavior
 
 _Underlined text_  
-
 *Italic*  
-**Bold**
+**Bold**  
+**[[WikiLink]]**
 
-## Prevent escaping tags where it can cause issues
+## Prevent escaping in-word dashes
 
-My username is joe_average or joe__average or _joe or whatever.  
-Friends call me joe_ or whatever.
+My username is joe_average or joe\_\_average or \_joe or whatever.  
+Friends call me joe\_ or whatever.
 
 ## Ensuring interpreting in tables
 
