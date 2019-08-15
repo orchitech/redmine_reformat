@@ -383,7 +383,7 @@ module TextileToMarkdown
         code = $2
 
         if m =~ /<redpre \w+ \d+>/
-          # offtag accidentaly matched
+          # offtag accidentaly matched - Redmine 3.4.2 fails on this, let's be better
           m
         else
           revert_hard_break code
