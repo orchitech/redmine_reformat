@@ -378,23 +378,28 @@ module TextileToMarkdown
       htmlcoder = HTMLEntities.new
       # replace hard line breaks temporarily to support @multiline code@ matching
       hard_break textile
-      textile.gsub!(/(?<!\w)@(?:\|(\w+?)\|)?(.+?)@(?!\w)/) do
+      textile.gsub!(/(?<!\w)@(?:\|(\w+?)\|)?(.+?)@(?!\w)/) do |m|
         # lang = $1 # lang is ignored even by Redmine
         code = $2
 
-        revert_hard_break code
-
-        # tighten the code span
-        lspace = rspace = ''
-        code.match(/^\s+/) {|s| lspace = s}
-        code.match(/\s+$/) {|s| rspace = s}
-        code.strip!
-
-        if code.empty?
-          "#{lspace}#{rspace}"
+        if m =~ /<redpre \w+ \d+>/
+          # offtag accidentaly matched
+          m
         else
-          @pre_list << "<code at>#{code}"
-          "#{lspace}<redpre code #{@pre_list.length - 1}></code>#{rspace}"
+          revert_hard_break code
+
+          # tighten the code span
+          lspace = rspace = ''
+          code.match(/^\s+/) {|s| lspace = s}
+          code.match(/\s+$/) {|s| rspace = s}
+          code.strip!
+
+          if code.empty?
+            "#{lspace}#{rspace}"
+          else
+            @pre_list << "<code at>#{code}"
+            "#{lspace}<redpre code #{@pre_list.length - 1}></code>#{rspace}"
+          end
         end
       end
       textile.gsub!(/@/, TAG_AT) # all @ that do not demark code
