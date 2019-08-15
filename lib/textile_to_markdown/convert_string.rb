@@ -688,7 +688,7 @@ module TextileToMarkdown
  
       # Replace <!-- end list --> injected by pandoc because Redmine incorrectly
       # does not supported HTML comments: http://www.redmine.org/issues/20497
-      markdown.gsub!(/\n\n<!-- end list -->\n/, "\n\n&#31;\n")
+      markdown.gsub!(/\n\n<!-- end list -->\n/, "\n\n&#29;\n")
 
       ## Restore/unescaping sequences that are protected differently in code blocks
 
