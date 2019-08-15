@@ -3,7 +3,7 @@ lists
 1.  numberedList
     1.  indented
 
-&#31;
+&#29;
 
   - bulletlist
       - indented
@@ -42,7 +42,7 @@ lists
 
   - [[table top - ABC]]
 
-&#31;
+&#29;
 
   - [[Components {blk}]]
       - individual items
