@@ -226,6 +226,14 @@ module TextileToMarkdown
       textile << last_blank_line
     end
 
+    def hard_break(text)
+      text.gsub!(/(.)\n(?!\Z| *([#*=]+(\s|$)|[{|]))/, "\\1<br />")
+    end
+    def revert_hard_break(text)
+      text.gsub!(/<br \/>/, "\n")
+    end
+
+
     QTAGS = [
       ['**', '*'],
       ['*'],
@@ -260,12 +268,6 @@ module TextileToMarkdown
       QTAGS.each do |qtag_rc, newqtag, qtag_re|
         text.gsub!(qtag_re) do |m|
           sta,oqs,qtag,content,oqa = $~[1..6]
-          # dashes within strikeout text make pandoc very fragile
-          if newqtag == "-"
-            content.gsub!(/((?<![[:alnum:]])-)|(-(?![[:alnum:]]))/) do
-              "Bword#{make_placeholder(newqtag)}Eword"
-            end
-          end
           qtag_ph = make_placeholder(newqtag)
           "#{sta}#{oqs}Bqtag#{qtag_ph}Eqtag#{content}Bqtag#{qtag_ph}Eqtag#{oqa}"
         end
@@ -341,6 +343,7 @@ module TextileToMarkdown
       end
 
       escape_html_tags textile
+      block_textile_quotes textile
 
       # make sure that empty lines mean new block
       glue_indented_continuations textile
@@ -366,15 +369,6 @@ module TextileToMarkdown
           @pre_list << "<pre class=\"#{TAG_FENCED_CODE_BLOCK}\">\n#{code_block}\n"
           "#{prefix}\n<redpre pre #{@pre_list.length - 1}></pre>#{postfix}"
         end
-        
-      end
-
-      # Preprocess non-interpreted sections for latter postprocessing
-      # Placeholders can be protected here
-      @pre_list.map! do |code|
-        code = code.dup
-        common_code_pre_process code
-        code
       end
 
       # Match inline code in RedCloth3 way and address these issues:
@@ -382,15 +376,13 @@ module TextileToMarkdown
       # - Redmine's inline code also gets html entities interpreted in Textile, but not in Markdown
       # - some sequences will be pre/postprocessed in normal text - protect them in code
       htmlcoder = HTMLEntities.new
-      atph = "Bat#{make_placeholder('@')}Eat"
-      nlph = ".Bnl#{make_placeholder("\n")}Enl."
-      # replace hard line breaks temporarily, so that the @code@ regexp matches multiline code
-      textile.gsub!( /(.)\n(?!\Z| *([#*=]+(\s|$)|[{|]))/, "\\1#{nlph}")
+      # replace hard line breaks temporarily to support @multiline code@ matching
+      hard_break textile
       textile.gsub!(/(?<!\w)@(?:\|(\w+?)\|)?(.+?)@(?!\w)/) do
         # lang = $1 # lang is ignored even by Redmine
-        code = htmlcoder.decode($2)
-        # sanitize dangerous resulting characters
-        code.gsub!(/[\r\n]/, ' ')
+        code = $2
+
+        revert_hard_break code
 
         # tighten the code span
         lspace = rspace = ''
@@ -401,19 +393,22 @@ module TextileToMarkdown
         if code.empty?
           "#{lspace}#{rspace}"
         else
-          common_code_pre_process code
-          # mark @code@ usages first
-          "#{lspace}#{TAG_WORD_SEP_RIGHT}#{atph}#{code}#{atph}#{TAG_WORD_SEP_LEFT}#{rspace}"
+          @pre_list << "<code at>#{code}"
+          "#{lspace}<redpre code #{@pre_list.length - 1}></code>#{rspace}"
         end
       end
-
       textile.gsub!(/@/, TAG_AT) # all @ that do not demark code
-      textile.gsub!(atph, '@')   # @ that demark code
-      textile.gsub!(nlph, "\n")  # restore hard line breaks
+      revert_hard_break textile
+
+      # Preprocess non-interpreted sections for latter postprocessing
+      # Placeholders can be protected here
+      @pre_list.map! do |code|
+        code = code.dup
+        common_code_pre_process code
+        code
+      end
 
       ## Redmine-interpreted sequences
-
-      block_textile_quotes textile
 
       # protect wiki links
       # escape following '(', which might be interpreted as MD link
@@ -518,7 +513,9 @@ module TextileToMarkdown
       end
 
       # make placeholderes from real qtags
+      hard_break textile
       inline_textile_span textile
+      revert_hard_break textile
 
       # protect qtag characters that pandoc tend to misinterpret
       # (has to be done after unindenting)
@@ -561,31 +558,6 @@ module TextileToMarkdown
       # Without this fix, a list of items containing <pre> would not be interpreted as a list at all.
       textile.gsub!(/^([*#]+ [^\n]*)(<redpre pre)\b/, "\\1\n\\2")
 
-      if false
-        # update: the following was not obseved with recent pandoc and dashes are not lists in Textile
-
-        # Some malformed textile content make pandoc run extremely slow,
-        # so we convert it to proper textile before hitting pandoc
-        # see https://github.com/jgm/pandoc/issues/3020
-        textile.gsub!(/-          # (\d+)/, '* \\1')
-
-        # long sequences of lines with leading dashes make pandoc hang, that's why
-        # we turn them into proper unordered lists:
-        textile.gsub!(/^(\s*)----(\s+[^-])/, "\\1****\\2")
-        textile.gsub!(/^(\s*)---(\s+[^-])/, "\\1***\\2")
-        textile.gsub!(/^(\s*)--(\s+[^-])/, "\\1**\\2")
-        textile.gsub!(/^(\s*)-(\s+[^-])/, "\\1*\\2")
-      else
-        # but these lines make pandoc add extra paragraphs, prevent it
-        ## TODO: addressed by qtag escaping?
-        ## textile.gsub!(/^- /, TAG_DASH_SPACE)
-      end
-
-      # add new lines before lists - commented out, as this can break subsequent lists and
-      # this should not be necessary - would have not worked even with Textile
-      # textile.gsub!(/^ *([^#].*?)\n(#+ )/m, "\\1\n\n\\2")
-      # textile.gsub!(/^ *([^*].*?)\n(\*+ )/m, "\\1\n\n\\2")
-
       # Symbols that are interpreted as a regular word
       # Relying on that they are not used in a special context
       textile.gsub!(/\([cC]\)/) do |m|
@@ -594,15 +566,18 @@ module TextileToMarkdown
 
       # Prefer inline code using backtics over code html tag (code is already protected as an offtag)
       textile.gsub!(/<redpre code (\d+)>\s*<\/code>/) do |m|
-        code = @pre_list[$1.to_i].sub(/^<code\b[^>]*>/, '')
+        prei = $1.to_i
+        code = @pre_list[prei].sub(/^<code\b([^>]*)>/, '')
+        codeparam = $1
+        @pre_list[prei] = "<code>#{code}" if codeparam == ' at'
+
         code.strip!
-        if code.empty? or code =~ /\n|#{escpipeph}/
+        code = htmlcoder.decode(code)
+
+        if code.empty? or code.include? escpipeph or (codeparam != ' at' and code.include? "\n")
           # cannot convert to @
           m
         else
-          code = htmlcoder.decode(code)
-          # sanitize dangerous resulting characters
-          code.gsub!(/[\r\n]/, ' ')
           # use placehoder for @
           "#{TAG_WORD_SEP_RIGHT}@#{code.gsub(/@/, TAG_AT)}@#{TAG_WORD_SEP_LEFT}"
         end
@@ -672,7 +647,7 @@ module TextileToMarkdown
       markdown.gsub!(/Bword#{PH_RE}Eword/) do
         get_placeholder($1)
       end
-      markdown.gsub!(/(^[[:blank:]]+)?\.Bescatstart#{PH_RE}Eescatstart\./) do
+      markdown.gsub!(/(^[[:blank:]]*)?\.Bescatstart#{PH_RE}Eescatstart\./) do
         esc = if $1.nil? then '' else '\\' end
         "#{$1}#{esc}#{get_placeholder($2)}"
       end
