@@ -8,6 +8,19 @@ E-mail works: @joe@example.com@
 No issue with backtick: @echo `date`@
 Recognizing ats when tightly surrounded: (@STARTED@/@FINISHED@)
 
+h2. Multiline inline code
+
+@This shall be code
+though the line breaks are lost in MD@
+
+@But block structures like lists take precedence
+* list item@
+
+@Table too
+
+|_. TH@ |
+| x |
+
 h2. Backticks preffered over code tag
 
 <code>should be backtick</code>

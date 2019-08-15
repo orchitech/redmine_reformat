@@ -383,6 +383,9 @@ module TextileToMarkdown
       # - some sequences will be pre/postprocessed in normal text - protect them in code
       htmlcoder = HTMLEntities.new
       atph = "Bat#{make_placeholder('@')}Eat"
+      nlph = ".Bnl#{make_placeholder("\n")}Enl."
+      # replace hard line breaks temporarily, so that the @code@ regexp matches multiline code
+      textile.gsub!( /(.)\n(?!\Z| *([#*=]+(\s|$)|[{|]))/, "\\1#{nlph}")
       textile.gsub!(/(?<!\w)@(?:\|(\w+?)\|)?(.+?)@(?!\w)/) do
         # lang = $1 # lang is ignored even by Redmine
         code = htmlcoder.decode($2)
@@ -404,8 +407,9 @@ module TextileToMarkdown
         end
       end
 
-      textile.gsub!(/@/, TAG_AT)    # all @ that do not demark code
-      textile.gsub!(/#{atph}/, '@') # @ that demark code
+      textile.gsub!(/@/, TAG_AT) # all @ that do not demark code
+      textile.gsub!(atph, '@')   # @ that demark code
+      textile.gsub!(nlph, "\n")  # restore hard line breaks
 
       ## Redmine-interpreted sequences
 
