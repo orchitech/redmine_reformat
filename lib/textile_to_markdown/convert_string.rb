@@ -323,7 +323,8 @@ module TextileToMarkdown
           all
         else
           urlesc = url.gsub(/[#&_!\\-]/) {|m| "Bcodeword#{make_placeholder(m)}Ecodeword"}
-          "#{leading}#{proto}#{urlesc}#{post}"
+          postesc = post.sub(/>/, ".Bany#{make_placeholder('&gt;')}Eany.")
+          "#{leading}#{proto}#{urlesc}#{postesc}"
         end
       end
     end
