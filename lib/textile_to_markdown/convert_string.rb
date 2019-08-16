@@ -42,10 +42,15 @@ module TextileToMarkdown
 
     private
 
+    # treat '==' as <notextile> ?
+    CONF_NOTEXTILE_2EQS = false
+
     TAG_AT = 'pandocIprotectedIatIsign'
     TAG_HASH = 'pandocIprotectedIhashIsign'
     TAG_EXCLAMATION = 'pandocIprotectedIexclamationImark'
-    TAG_FENCED_CODE_BLOCK = 'forceIpandocItoIouputIfencedIcodeIblock'
+    TAG_FENCED_CODE_BLOCK = 'pandocIforceItoIouputIfencedIcodeIblock'
+    TAG_LINE_BREAK_IN_QTAG = '<br class="pandocIprotectIlineIbreakIinIqtag" />'
+    TAG_BREAK_NOTEXTILE_2EQS = 'pandocIbreakInotextileI2eqs'
 
     TAG_NOTHING = 'pandocInothingIwillIbeIhere'
     TAG_WORD_SEP = '.pandocIwordIseparatorIdoubleIsided.'
@@ -55,15 +60,15 @@ module TextileToMarkdown
       TAG_NOTHING, TAG_WORD_SEP, TAG_WORD_SEP_LEFT, TAG_WORD_SEP_RIGHT
     ].map {|ph| Regexp::quote ph}.join('|')
 
-    TAG_DASH_SPACE = 'pandocIprotectedIdashIspace'
-
     TAG_PH_BEGIN = 'MDCONVERSIONPHxqlrx'
     TAG_PH_END = 'xEND'
     PH_RE = "#{TAG_PH_BEGIN}([0-9]+)#{TAG_PH_END}"
     PH_RE_NOCAP = "#{TAG_PH_BEGIN}[0-9]+#{TAG_PH_END}"
 
-    # not really needed
+    PIPE_HTMLENT_MATCH = '&vert;|&#124;|&#[xX]7[cC];'
+
     def no_textile(text)
+      return unless CONF_NOTEXTILE_2EQS
       text.gsub!(/(^|\s)==([^=]+.*?)==(\s|$)?/,
                  '\1<notextile>\2</notextile>\3')
       text.gsub!(/^ *==([^=]+.*?)==/m,
@@ -268,8 +273,16 @@ module TextileToMarkdown
       QTAGS.each do |qtag_rc, newqtag, qtag_re|
         text.gsub!(qtag_re) do |m|
           sta,oqs,qtag,content,oqa = $~[1..6]
-          qtag_ph = make_placeholder(newqtag)
-          "#{sta}#{oqs}Bqtag#{qtag_ph}Eqtag#{content}Bqtag#{qtag_ph}Eqtag#{oqa}"
+          # outplace leading and trailing line breaks, which Redmine supports
+          content.sub!(/^((?:<br \/>)+)/) {|brl| oqs << brl; ''}
+          content.sub!(/((?:<br \/>)+)$/) {|brr| oqa = "#{brr}#{oqa}"; ''}
+          if content =~ /\S/
+            content.gsub!(/<br \/>/, TAG_LINE_BREAK_IN_QTAG)
+            qtag_ph = make_placeholder(newqtag)
+            "#{sta}#{oqs}Bqtag#{qtag_ph}Eqtag#{content}Bqtag#{qtag_ph}Eqtag#{oqa}"
+          else
+            "#{sta}#{oqs}#{oqa}"
+          end
         end
       end
     end
@@ -342,8 +355,15 @@ module TextileToMarkdown
         "#{md[:preopen]}</pre>#{codeclose2}#{md[:spacepastpreclose]}"
       end
 
+      no_textile textile
       escape_html_tags textile
       block_textile_quotes textile
+
+      # preserve horizontal rules, so that they are not considered 'free qtags'
+      textile.gsub!(/((?:\n\n|\A\n?)[[:blank:]]*)(-{3,})([[:blank:]]*(?:\n\n|\n?\Z))/m) do
+        before, hr, after = $~[1..3]
+        "#{before}Bhr#{make_placeholder hr}Ehr#{after}"
+      end
 
       # make sure that empty lines mean new block
       glue_indented_continuations textile
@@ -459,10 +479,9 @@ module TextileToMarkdown
       escpipeph = ".Bany#{make_placeholder('&#124;')}Eany."
       textile.gsub!(/^ *\|[^\n]*\| *$/) do |row|
         # pandoc even decodes html entity, making it a cell separator
-        row.gsub!(/&#124;|&#[xX]7[cC];/, escpipeph);
-        row.gsub!(/(?<stag><redpre (?<htag>#{OFFTAG_TAGS}\b) (?<preid>\d+\b)[^>\n]*>|(?<at>@))(?<content>.*?)(?<etag><\/\k<htag>[^>\n]*>|\k<at>)/) do |offtext|
+        row.gsub!(/#{PIPE_HTMLENT_MATCH}/, escpipeph);
+        row.gsub!(/(?<stag><redpre (?<htag>#{OFFTAG_TAGS}\b) (?<preid>\d+\b)[^>\n]*>)(?<content>.*?)(?<etag><\/\k<htag>[^>\n]*>)/) do |offtext|
           stag, content, etag = $~[:stag], $~[:content], $~[:etag]
-          at = !!$~[:at]
           have_escape = false
           content.gsub!(/\|/) do
             have_escape = true
@@ -472,15 +491,13 @@ module TextileToMarkdown
           # protect also ripped offtags
           unless @pre_list.empty?
             offtext.scan(/<redpre \w+ (\d+)>/) do
-              @pre_list[$1.to_i].gsub!(/\|/) do
+              @pre_list[$1.to_i].gsub!(/\||#{PIPE_HTMLENT_MATCH}/) do
                 have_escape = true
                 escpipeph
               end
             end
           end
-          if have_escape && at
-            "<code>#{content}</code>"
-          elsif have_escape
+          if have_escape
             "#{stag}#{content}#{etag}"
           else
             offtext
@@ -548,8 +565,14 @@ module TextileToMarkdown
         get_placeholder($1)
       end
 
+      ## restore construct that use qtag characters
       # restore list prefixes
       textile.gsub!(/list#{PH_RE}/) do
+        get_placeholder($1)
+      end
+
+      # restore horizontal rules
+      textile.gsub!(/Bhr#{PH_RE}Ehr/) do
         get_placeholder($1)
       end
 
@@ -586,6 +609,11 @@ module TextileToMarkdown
           # use placehoder for @
           "#{TAG_WORD_SEP_RIGHT}@#{code.gsub(/@/, TAG_AT)}@#{TAG_WORD_SEP_LEFT}"
         end
+      end
+
+      # prevent sequences of = to be interpreted as <notextile>, see #no_textile
+      textile.gsub!(/={2,}/) do |m|
+        m.gsub('=', "=#{TAG_BREAK_NOTEXTILE_2EQS}")
       end
 
       smooth_offtags textile
@@ -630,13 +658,17 @@ module TextileToMarkdown
     end
 
     def post_process_markdown(markdown)
+      markdown.gsub!(TAG_LINE_BREAK_IN_QTAG, "  \n")
+      markdown.gsub!(/^([[:blank:]]*)=#{TAG_BREAK_NOTEXTILE_2EQS}/, '\\1\\=')
+      markdown.gsub!("=#{TAG_BREAK_NOTEXTILE_2EQS}", '=')
       # Reclaim known placeholder sparations
       markdown.gsub!(/\.(?<ph>B(?<flavour>any|escatstart|escoutword)#{PH_RE}E\k<flavour>)(?<mis2>[)])\./) do
         ".#{$~[:ph]}.#{$~[:mis2]}"
       end
 
-      # Remove the \ pandoc puts before * and > at begining of lines
-      markdown.gsub!(/^((\\[*>])+)/) { $1.gsub("\\", "") }
+      ## TODO: probably undesired
+      ### Remove the \ pandoc puts before > at begining of lines
+      ### markdown.gsub!(/^((\\[>])+)/) { $1.gsub("\\", "") }
 
       # Remove the injected tag
       markdown.gsub!(' ' + TAG_FENCED_CODE_BLOCK, '')
@@ -679,7 +711,7 @@ module TextileToMarkdown
 
 
       # Unescape URL that could easily get mangled
-      markdown.gsub!(%r{(https?://[^\s)]+)}) { |link| link.gsub(/\\([#&])/, "\\1") }
+      markdown.gsub!(%r{(https?://[^\s)]+)}) { |link| link.gsub(/\\([#&_])/, "\\1") }
 
       # Escaped exclamation marks look weird in normal text and the only special meaning in MD
       # should be before '['. And Redmine link cancelation works both with ! and \!
@@ -694,8 +726,6 @@ module TextileToMarkdown
       markdown.gsub!(/^(?'indent1' *)(?'fence'~~~|```)(?'infostr'[^~`\n]*)\n(?'codeblock'(^(?! *\k'fence')[^\n]*\n)*)^(?'indent2' *)\k'fence' *$\n?/m) do
         indent1, fence, infostr, codeblock, indent2 = $~[:indent1], $~[:fence], $~[:infostr], $~[:codeblock], $~[:indent2]
 
-        ## TODO - adressed by qtag escaping?
-        ## codeblock.gsub!(/^#{TAG_DASH_SPACE}/, '- ')
         # make codeblocks easily distinguishable from tables
         codeblock.gsub!(/^/, TAG_NOTHING)
 
@@ -720,8 +750,6 @@ module TextileToMarkdown
       # restore protected sequences that were restored differently in code blocks
 
       # restore global tags that migh have caused issues if restored earlier
-      ## TODO not needed?
-      ## markdown.gsub!(/#{TAG_DASH_SPACE}/, '\\- ')
 
       # restore macro-like protected elements
       markdown.gsub!(/\{\{MDCONVERSION(\w+)\}\}/) { pop_fragment $1 }

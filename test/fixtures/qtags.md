@@ -13,10 +13,14 @@ _Underlined text_
 **Bold**  
 **[[WikiLink]]**
 
-## Prevent escaping in-word dashes
+Redmine supports *multiline  
+qtags* and even allows to  
+*start with a newline*
 
-My username is joe_average or joe\_\_average or \_joe or whatever.  
-Friends call me joe\_ or whatever.
+## Prevent escaping in-word underscores
+
+My username is joe_average or joe\_\_average or *joe or whatever.  
+Friends call me joe* or whatever.
 
 ## Ensuring interpreting in tables
 

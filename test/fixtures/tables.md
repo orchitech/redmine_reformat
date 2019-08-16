@@ -22,8 +22,9 @@ Paragraph Lorem ipsum
 
 # Table with protected pipe chars
 
-| a1                | a2                                    |
-| ----------------- | ------------------------------------- |
-| &#124;            | pipe in code: <code>&#124;</code>     |
-| true &#124; false | c2                                    |
-| d1                | also <code>pipe &#124; in code</code> |
+| a1                  | a2                                    |
+| ------------------- | ------------------------------------- |
+| &#124;              | pipe in code: <code>&#124;</code>     |
+| <code>&#124;</code> | <code>&#124;</code>                   |
+| true &#124; false   | c2                                    |
+| d1                  | also <code>pipe &#124; in code</code> |

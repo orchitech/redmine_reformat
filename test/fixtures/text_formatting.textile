@@ -1,2 +1,11 @@
 *bold* _italic_ *_bold italic_* +underline+ -strike-through- Plain ^superscript^ Plain ~subscript~
 
+Equal sign notextile processing is configurable, but this should be never processed === something ===
+
+=== neither this ===
+
+Horizontal rule follows
+
+---------
+
+End of horizontal rule.

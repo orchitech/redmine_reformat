@@ -13,7 +13,11 @@ _Italic_
 *Bold*
  *[[WikiLink]]*
 
-h2. Prevent escaping in-word dashes
+Redmine supports _multiline
+qtags_ and even allows to _
+start with a newline_
+
+h2. Prevent escaping in-word underscores
 
 My username is joe_average or joe__average or _joe or whatever.
 Friends call me joe_ or whatever.

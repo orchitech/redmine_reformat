@@ -22,5 +22,6 @@ h1. Table with protected pipe chars
 
 |_. a1   |_. a2 |
 | &#124; | pipe in code: @|@  |
+| <code>&#124;</code> | @&#124;@  |
 | true<notextile> | </notextile>false | c2 |
 | d1 | also <code>pipe | in code</code> |
