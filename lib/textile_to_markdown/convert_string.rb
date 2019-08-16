@@ -224,7 +224,8 @@ module TextileToMarkdown
           end
         else
           last_blank_line = ''
-          line
+          # unindent heading (which is allowed by Redmine)
+          line.sub(/^[[:blank:]]+(h[1-6]\.[[:blank:]]+\S)/, '\\1')
         end
       end
       textile << last_blank_line
