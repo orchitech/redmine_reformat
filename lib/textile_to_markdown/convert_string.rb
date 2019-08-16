@@ -289,7 +289,7 @@ module TextileToMarkdown
     # Preprocess / protect sequences in offtags and @code@ that are treated differently in interpreted code
     def common_code_pre_process(code)
       # allow for escaping/unescaping these characters in special contexts
-      code.gsub!(/[!+_*-]/) do |m|
+      code.gsub!(/[!+_*{}-]/) do |m|
         "Bcodeword#{make_placeholder(m)}Ecodeword"
       end
     end
@@ -322,7 +322,7 @@ module TextileToMarkdown
           # and URLs prefixed with ! !> !< != (textile images)
           all
         else
-          urlesc = url.gsub(/[#&_!\\-]/) {|m| "Bcodeword#{make_placeholder(m)}Ecodeword"}
+          urlesc = url.gsub(/[#&_!\[\]\\-]/) {|m| "Bcodeword#{make_placeholder(m)}Ecodeword"}
           postesc = post.sub(/>/, ".Bany#{make_placeholder('&gt;')}Eany.")
           "#{leading}#{proto}#{urlesc}#{postesc}"
         end
@@ -746,6 +746,9 @@ module TextileToMarkdown
       # Escaped exclamation marks look weird in normal text and the only special meaning in MD
       # should be before '['. And Redmine link cancelation works both with ! and \!
       markdown.gsub!(/\\(!)(?!\[)/, '\\1')
+
+      # Remove MD line break after collapse macro
+      markdown.gsub!(/(\{\{collapse\([^\n]*)[ ]{2}$/, '\\1')
 
       # Replace code placeholders *after* the playing with the text
       markdown.gsub!(/Bcodeword#{PH_RE}Ecodeword/) do
