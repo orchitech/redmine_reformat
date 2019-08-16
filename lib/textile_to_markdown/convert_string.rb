@@ -47,7 +47,6 @@ module TextileToMarkdown
 
     TAG_AT = 'pandocIprotectedIatIsign'
     TAG_HASH = 'pandocIprotectedIhashIsign'
-    TAG_EXCLAMATION = 'pandocIprotectedIexclamationImark'
     TAG_FENCED_CODE_BLOCK = 'pandocIforceItoIouputIfencedIcodeIblock'
     TAG_LINE_BREAK_IN_QTAG = '<br class="pandocIprotectIlineIbreakIinIqtag" />'
     TAG_BREAK_NOTEXTILE_2EQS = 'pandocIbreakInotextileI2eqs'
@@ -291,7 +290,41 @@ module TextileToMarkdown
     def common_code_pre_process(code)
       # allow for escaping/unescaping these characters in special contexts
       code.gsub!(/[!+_*-]/) do |m|
-        "Bword#{make_placeholder(m)}Eword"
+        "Bcodeword#{make_placeholder(m)}Ecodeword"
+      end
+    end
+
+    AUTO_LINK_RE = %r{
+                    (                          # leading text
+                      <\w+[^>]*?>|             # leading HTML tag, or
+                      [\s\(\[,;]|              # leading punctuation, or
+                      ^                        # beginning of line
+                    )
+                    (
+                      (?:https?://)|           # protocol spec, or
+                      (?:s?ftps?://)|
+                      (?:www\.)                # www.*
+                    )
+                    (
+                      ([^<]\S*?)               # url
+                      (\/)?                    # slash
+                    )
+                    ((?:&gt;)?|[^[:alnum:]_\=\/;\(\)]*?)               # post
+                    (?=<|\s|$)
+                    }x
+
+    # Protect in-link sequences that causes issues to poandoc
+    def protect_autolinks(text)
+      text.gsub!(AUTO_LINK_RE) do
+        all, leading, proto, url, post = $&, $1, $2, $3, $6
+        if leading =~ /<a\s/i || leading =~ /![<>=]?/
+          # don't replace URLs that are already linked
+          # and URLs prefixed with ! !> !< != (textile images)
+          all
+        else
+          urlesc = url.gsub(/[#&_!\\-]/) {|m| "Bcodeword#{make_placeholder(m)}Ecodeword"}
+          "#{leading}#{proto}#{urlesc}#{post}"
+        end
       end
     end
 
@@ -541,6 +574,7 @@ module TextileToMarkdown
 
       # protect qtag characters that pandoc tend to misinterpret
       # (has to be done after unindenting)
+      protect_autolinks textile
       textile.gsub!(/(?<!\|)[*_+-](?!\|)/) do |m|
         out = m
         flavour = case m
@@ -676,7 +710,6 @@ module TextileToMarkdown
       # Restore protected sequences that do not differ in code blocks and regular MD
       markdown.gsub!(TAG_AT, '@')
       markdown.gsub!(TAG_HASH, '#')
-      markdown.gsub!(TAG_EXCLAMATION, '!')
 
       markdown.gsub!(/\.Bany#{PH_RE}Eany\./) do
         get_placeholder($1)
@@ -709,13 +742,14 @@ module TextileToMarkdown
         "#{$1}))"
       end
 
-
-      # Unescape URL that could easily get mangled
-      markdown.gsub!(%r{(https?://[^\s)]+)}) { |link| link.gsub(/\\([#&_])/, "\\1") }
-
       # Escaped exclamation marks look weird in normal text and the only special meaning in MD
       # should be before '['. And Redmine link cancelation works both with ! and \!
       markdown.gsub!(/\\(!)(?!\[)/, '\\1')
+
+      # Replace code placeholders *after* the playing with the text
+      markdown.gsub!(/Bcodeword#{PH_RE}Ecodeword/) do
+        get_placeholder($1)
+      end
 
       # Make use of Redmine's underline syntax (span does not work)
       # TODO: allow multiline while protecting code blocks ... but don't have a use case for it now
