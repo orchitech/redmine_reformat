@@ -1,0 +1,2 @@
+* should work even at the very beginning
+* and end of the text
