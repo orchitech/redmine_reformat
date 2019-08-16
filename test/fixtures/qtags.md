@@ -2,7 +2,7 @@
 
 ## Special pandoc behavior
 
-Parentheses within qtags should be interpreted as normal text: **(hello)**
+Parentheses and prackets within qtags should be interpreted as normal text: **(hello)** **[hello]** **{hello}**
 
 Pandoc is fragile about dashes in strikeout text: ~~this should - be (?) striked-out~~
 

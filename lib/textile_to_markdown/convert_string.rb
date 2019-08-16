@@ -290,7 +290,7 @@ module TextileToMarkdown
     # Preprocess / protect sequences in offtags and @code@ that are treated differently in interpreted code
     def common_code_pre_process(code)
       # allow for escaping/unescaping these characters in special contexts
-      code.gsub!(/[!+_*{}-]/) do |m|
+      code.gsub!(/[!+_*{}\[\]-]/) do |m|
         "Bcodeword#{make_placeholder(m)}Ecodeword"
       end
     end
@@ -591,8 +591,8 @@ module TextileToMarkdown
        ".B#{flavour}#{make_placeholder(out)}E#{flavour}."
       end
 
-      # parenthesis and curly brackets in qtags get misinterpteted
-      textile.gsub!(/(?<=#{TAG_PH_END}Eqtag)[{(]|[})](?=Bqtag#{TAG_PH_BEGIN})/) do |m|
+      # parenthesis and brackets in qtags get misinterpteted
+      textile.gsub!(/(?<=#{TAG_PH_END}Eqtag)[{(\[]|[})\]](?=Bqtag#{TAG_PH_BEGIN})/) do |m|
         qtag_ph = ".Bany#{make_placeholder(m)}Eany."
       end
 
