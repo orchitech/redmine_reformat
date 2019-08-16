@@ -27,3 +27,9 @@ Friends call me joe* or whatever.
 | Task                                                  | Description                                    |
 | ----------------------------------------------------- | ---------------------------------------------- |
 | *this would not be identified as qtags if not spaced* | spaces should be added around table delimiters |
+
+## Collisions
+
+  - Ok to use *within item*
+  - But block \_structure
+  - takes precedence\_

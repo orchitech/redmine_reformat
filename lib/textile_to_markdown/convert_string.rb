@@ -231,7 +231,7 @@ module TextileToMarkdown
     end
 
     def hard_break(text)
-      text.gsub!(/(.)\n(?!\Z| *([#*=]+(\s|$)|[{|]))/, "\\1<br />")
+      text.gsub!(/(.)\n(?!\Z| *((?:[#*=]+|list#{PH_RE_NOCAP})(\s|$)|[{|]))/, "\\1<br />")
     end
     def revert_hard_break(text)
       text.gsub!(/<br \/>/, "\n")

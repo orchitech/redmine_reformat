@@ -26,3 +26,9 @@ h2. Ensuring interpreting in tables
 
 |_. Task |_. Description |
 |_this would not be identified as qtags if not spaced_| spaces should be added around table delimiters    |
+
+h2. Collisions
+
+* Ok to use _within item_
+* But block _structure
+* takes precedence_
