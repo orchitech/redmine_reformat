@@ -17,6 +17,15 @@ h1. Unclosed @</code>@ tag
 puts "why bother to close code when I close the outter pre?"
 </pre>
 
+h1. Real code tag inside pre
+
+<pre>
+<response>
+  <code>XX</code>
+</response>
+<response><code class="foo">YY</code></response>
+</pre>
+
 h1. Termination by end of file @</pre>@
 
 <pre><code class="ruby">

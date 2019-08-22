@@ -380,13 +380,21 @@ module TextileToMarkdown
         codeclose2 = nil if md[:codeopen] and md[:codeclose1].nil?
 
         offcode1 = md[:offcode1].to_i
-        offcode = if md[:offcode2] then md[:offcode2].to_i else offcode1 end
+        # redmine mangles pre block if it contains code, let's be better
+        real_code = md[:codeopen] && @pre_list[offcode1] =~ /^<pre[^>]*>.*[\S]/m
+        offcode = if md[:offcode2] and !real_code then md[:offcode2].to_i else offcode1 end
 
         @pre_list[offcode1] = @pre_list[offcode].sub(/^<(?:code|pre)\b(\s+class="[^"]+")?/) do
           preparam = if $1 then $1 else " class=\"#{TAG_FENCED_CODE_BLOCK}\"" end
           "<pre#{preparam}"
         end
-        @pre_list[offcode1] += md[:out] unless md[:out].empty?
+        if real_code
+          pre_content = "#{md[:codeopen]}#{md[:out]}#{md[:codeclose1]}".dup
+          smooth_offtags pre_content
+          @pre_list[offcode1] += pre_content
+        else
+          @pre_list[offcode1] += md[:out] unless md[:out].empty?
+        end
         "#{md[:preopen]}</pre>#{codeclose2}#{md[:spacepastpreclose]}"
       end
 

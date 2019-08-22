@@ -17,6 +17,15 @@ puts "users often close pre before code"
 puts "why bother to close code when I close the outter pre?"
 ```
 
+# Real code tag inside pre
+
+```
+<response>
+  <code>XX</code>
+</response>
+<response><code class="foo">YY</code></response>
+```
+
 # Termination by end of file `</pre>`
 
 ``` ruby
