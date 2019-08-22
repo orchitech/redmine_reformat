@@ -411,7 +411,8 @@ module TextileToMarkdown
       block_textile_quotes textile
 
       # preserve horizontal rules, so that they are not considered 'free qtags'
-      textile.gsub!(/((?:\n\n|\A\n?)[[:blank:]]*)(-{3,})([[:blank:]]*(?:\n\n|\n?\Z))/m) do
+      # also strip whitespace around it - allowed by Redmine, but would break further processing
+      textile.gsub!(/((?:\n\n|\A\n?))[[:blank:]]*(-{3,})[[:blank:]]*((?:\n\n|\n?\Z))/m) do
         before, hr, after = $~[1..3]
         "#{before}Bhr#{make_placeholder hr}Ehr#{after}"
       end

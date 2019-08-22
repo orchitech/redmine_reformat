@@ -8,4 +8,8 @@ Horizontal rule follows
 
 ---------
 
+End of horizontal rule. Horizontal rule also can have whitespace around it
+ 
+ --- 
+ 
 End of horizontal rule.
