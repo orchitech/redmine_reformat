@@ -38,3 +38,11 @@ pre block
 
   
 indented code blocks should be supressed directly after block
+
+Lorem ipsum.
+
+indented code block should not work if there is an offtag already
+
+```
+code
+```

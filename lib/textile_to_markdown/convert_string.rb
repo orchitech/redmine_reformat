@@ -408,7 +408,7 @@ module TextileToMarkdown
       #
       # Update: redmine made its Textile interpreting stricter between 3.4.2 and 3.4.11 and
       # space-indented multi-level lists do not work anymore. This code solves it as a side effect :)
-      textile.gsub!(/(\A\n?|\n\n)^((?: (?!<redpre))+)(.+?)(?=\n?\Z|\n\n)/m) do |block|
+      textile.gsub!(/(\A\n?|\n\n)^((?: (?!<redpre))+)((?:.(?!<redpre))+?)(?=\n?\Z|\n\n)/m) do |block|
         prefix = $1
         strip_spaces = $2.length
         postfix = $4
