@@ -46,3 +46,11 @@ indented code block should not work if there is an offtag already
 ```
 code
 ```
+
+Do not touch table-like input in code blocks
+
+```
+|a1|a2|a3|
+|b1  | b2| |
+|c1|  | c2|
+```

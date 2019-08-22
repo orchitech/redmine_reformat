@@ -831,7 +831,6 @@ module TextileToMarkdown
       end
 
       # restore protected sequences that were restored differently in code blocks
-      markdown.gsub!(/#{TAG_NOTHING}/, '')
 
       # restore global tags that migh have caused issues if restored earlier
 
@@ -840,7 +839,7 @@ module TextileToMarkdown
       # and the eventual placeholders in them
       markdown.gsub!(TAG_AT, '@')
 
-      # table reformatting depends on final character count
+      # table reformatting depends on final character count in table cells
       markdown.gsub!(/(^\|[^\n]+\|$\n)+/m) do |table|
         begin
           table = MarkdownTableFormatter.new(table).to_md
@@ -851,6 +850,10 @@ module TextileToMarkdown
         table
       end
 
+      # unmark code blocks
+      markdown.gsub!(/#{TAG_NOTHING}/, '')
+
+      # restore placeholders preserving text length
       markdown.gsub!(UNICODE_1CHAR_PRIV_RE) {|ph| char_for_ph ph}
 
       expand_blockqutes markdown

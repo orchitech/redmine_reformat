@@ -36,3 +36,10 @@ Lorem ipsum.
 
  indented code block should not work if there is an offtag already
 <pre>code</pre>
+
+Do not touch table-like input in code blocks
+<pre>
+|a1|a2|a3|
+|b1  | b2| |
+|c1|  | c2|
+</pre>
