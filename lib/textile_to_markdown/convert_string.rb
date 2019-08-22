@@ -171,6 +171,50 @@ module TextileToMarkdown
       text
     end
 
+    # Merge <pre><code>... to <pre>...
+    # Allow also for swapping closing offtags, which is tolerated by Redmine
+    def merge_pre_code_offtags(text)
+      text.gsub!(
+        %r{
+          (?<preopen><redpre[ ]pre[ ](?<offcode1>\d+)>\s*)
+          (?<codeopen><redpre[ ]code[ ](?<offcode2>\d+)>)?
+          (?<out>.*?)
+          (?<preclose>
+            (?<codeclose1></code[ ]*>)?
+            \s*
+            </pre[ ]*>
+            (?<spacepastpreclose>\s*)
+            (?<codeclose2></code[ ]*>)?
+            |\Z
+          )
+        }xm) do |full|
+        md = $~
+        codeclose2 = md[:codeclose2]
+        codeclose2 = nil if md[:codeopen] and md[:codeclose1].nil?
+
+        offcode1 = md[:offcode1].to_i
+        # redmine mangles pre block if it contains code, let's be better
+        raw_code = @pre_list[offcode1] =~ /^<pre[^>]*>.*[\S]/m
+
+        offcode = if md[:offcode2] and !raw_code then md[:offcode2].to_i else offcode1 end
+
+        @pre_list[offcode1] = @pre_list[offcode].sub(/^<(?:code|pre)\b(\s+class="[^"]+")?/) do
+          preparam = if $1 then $1 else " class=\"#{TAG_FENCED_CODE_BLOCK}\"" end
+          "<pre#{preparam}"
+        end
+        out = md[:out]
+        if raw_code
+          pre_content = "#{md[:codeopen]}#{out}#{md[:codeclose1]}".dup
+          out = String.new
+          smooth_offtags pre_content
+          @pre_list[offcode1] += pre_content
+        end
+        # eat </code> if it is opened and <pre> is closed by EOF
+        out.sub!(/<\/code>\s*$/m, '') if md[:codeopen]
+        "#{md[:preopen]}#{out}</pre>#{codeclose2}#{md[:spacepastpreclose]}"
+      end
+    end
+
     def smooth_offtags(text)
       unless @pre_list.empty?
         ## replace <pre> content
@@ -359,47 +403,8 @@ module TextileToMarkdown
       # pandoc does not create fenced code blocks when there is leading whitespace
       textile.gsub!(/^[[:blank:]]+(?=<redpre pre\b)/, '')
 
-      # Move the class from <code> to <pre> and remove <code> so pandoc can generate a code block with correct language
-      # Allow also for swapping closing offtags, which is tolerated by Redmine
-      textile.gsub!(
-        %r{
-          (?<preopen><redpre[ ]pre[ ](?<offcode1>\d+)>\s*)
-          (?<codeopen><redpre[ ]code[ ](?<offcode2>\d+)>)?
-          (?<out>.*?)
-          (?<preclose>
-            (?<codeclose1></code[ ]*>)?
-            \s*
-            </pre[ ]*>
-            (?<spacepastpreclose>\s*)
-            (?<codeclose2></code[ ]*>)?
-            |\Z
-          )
-        }xm) do
-        md = $~
-        codeclose2 = md[:codeclose2]
-        codeclose2 = nil if md[:codeopen] and md[:codeclose1].nil?
-
-        offcode1 = md[:offcode1].to_i
-        # redmine mangles pre block if it contains code, let's be better
-        real_code = md[:codeopen] && @pre_list[offcode1] =~ /^<pre[^>]*>.*[\S]/m
-
-        offcode = if md[:offcode2] and !real_code then md[:offcode2].to_i else offcode1 end
-
-        @pre_list[offcode1] = @pre_list[offcode].sub(/^<(?:code|pre)\b(\s+class="[^"]+")?/) do
-          preparam = if $1 then $1 else " class=\"#{TAG_FENCED_CODE_BLOCK}\"" end
-          "<pre#{preparam}"
-        end
-        out = md[:out]
-        if real_code
-          pre_content = "#{md[:codeopen]}#{out}#{md[:codeclose1]}".dup
-          out = ''
-          smooth_offtags pre_content
-          @pre_list[offcode1] += pre_content
-        end
-        # eat </code> if it is opened and <pre> is closed by EOF
-        out.sub!(/<\/code>\s*$/m, '') if md[:codeopen] 
-        "#{md[:preopen]}#{out}</pre>#{codeclose2}#{md[:spacepastpreclose]}"
-      end
+      # Move the class from <code> to <pre> and remove <code>, so pandoc can generate a code block with correct language
+      merge_pre_code_offtags textile
 
       no_textile textile
       escape_html_tags textile
