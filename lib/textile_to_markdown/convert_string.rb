@@ -2,6 +2,7 @@
 
 # Contains portions of Redmine and Redcloth3 code
 
+require 'set'
 require 'open3'
 require 'tempfile'
 require 'timeout'
@@ -21,6 +22,7 @@ module TextileToMarkdown
       @reference = reference
       @fragments = {}
       @placeholders = []
+      init_char_phs(@textile)
     end
 
     def call
@@ -65,6 +67,37 @@ module TextileToMarkdown
     PH_RE_NOCAP = "#{TAG_PH_BEGIN}[0-9]+#{TAG_PH_END}"
 
     PIPE_HTMLENT_MATCH = '&vert;|&#124;|&#[xX]7[cC];'
+
+    UNICODE_1CHAR_PRIV_START = "\uE000"
+    UNICODE_1CHAR_PRIV_END = "\uF8FF"
+    UNICODE_1CHAR_PRIV_RE = /[#{UNICODE_1CHAR_PRIV_START}-#{UNICODE_1CHAR_PRIV_END}]/
+
+    # prepare 1-char placeholders from Unicode's Private Use Area
+    # this approach might have been utilized more if introduced earlier :)
+    def init_char_phs(text)
+      @occupied_char_placeholders = Set.new(text.scan(UNICODE_1CHAR_PRIV_RE).collect {|c| c.ord})
+      @char_ph_unused = UNICODE_1CHAR_PRIV_START.ord
+      @char_phs = []
+      @ph_chars = []
+    end
+
+    def ph_for_char(char)
+      i = @ph_chars.index(char)
+      if i.nil?
+        i = @ph_chars.length
+        @char_ph_unused += 1 while @occupied_char_placeholders.include? @char_ph_unused
+        raise 'Run out of 1-char placeholders' if @char_ph_unused > UNICODE_1CHAR_PRIV_END.ord
+        @ph_chars << char
+        @char_phs << @char_ph_unused
+        @char_ph_unused += 1
+      end
+      @char_phs[i].chr(Encoding::UTF_8)
+    end
+
+    def char_for_ph(ph)
+      i = @char_phs.index(ph.ord)
+      if i.nil? then ph else @ph_chars[i] end
+    end
 
     def no_textile(text)
       return unless CONF_NOTEXTILE_2EQS
@@ -492,14 +525,16 @@ module TextileToMarkdown
 
       # protect wiki links
       # escape following '(', which might be interpreted as MD link
-      textile.gsub!(/(!?\[\[[^\]\n\|]+(?:\|[^\]\n\|]+)?\]\])(( *\n? *)\()?/m) do
+      textile.gsub!(/(!?\[\[[^\]\n\|]+(?:\|[^\]\n\|]+)?\]\])(( *\n? *)\()?/m) do |link|
         wiki_link, parenthesis_after, parenthesis_indent = $1, $2, $3
         if parenthesis_after.nil?
-          "{{MDCONVERSION#{push_fragment($&)}}}"
+          link = link.dup
         else
-          escaped = "#{wiki_link}#{parenthesis_indent}\\("
-          "{{MDCONVERSION#{push_fragment(escaped)}}}"
+          link = "#{wiki_link}#{parenthesis_indent}\\(".dup
         end
+        # protect pipe for table processing
+        link.gsub!('|', ph_for_char('|'))
+        "{{MDCONVERSION#{push_fragment(link)}}}"
       end
 
       # This would be an appropriate place to normalize lists to support Redmine flexible treatment.
@@ -795,6 +830,17 @@ module TextileToMarkdown
         end
       end
 
+      # restore protected sequences that were restored differently in code blocks
+      markdown.gsub!(/#{TAG_NOTHING}/, '')
+
+      # restore global tags that migh have caused issues if restored earlier
+
+      # restore macro-like protected elements
+      markdown.gsub!(/\{\{MDCONVERSION(\w+)\}\}/) { pop_fragment $1 }
+      # and the eventual placeholders in them
+      markdown.gsub!(TAG_AT, '@')
+
+      # table reformatting depends on final character count
       markdown.gsub!(/(^\|[^\n]+\|$\n)+/m) do |table|
         begin
           table = MarkdownTableFormatter.new(table).to_md
@@ -804,16 +850,8 @@ module TextileToMarkdown
         end
         table
       end
-      markdown.gsub!(/#{TAG_NOTHING}/, '')
 
-      # restore protected sequences that were restored differently in code blocks
-
-      # restore global tags that migh have caused issues if restored earlier
-
-      # restore macro-like protected elements
-      markdown.gsub!(/\{\{MDCONVERSION(\w+)\}\}/) { pop_fragment $1 }
-      # and the eventual placeholders in them
-      markdown.gsub!(TAG_AT, '@')
+      markdown.gsub!(UNICODE_1CHAR_PRIV_RE) {|ph| char_for_ph ph}
 
       expand_blockqutes markdown
 

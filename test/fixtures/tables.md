@@ -28,3 +28,9 @@ Paragraph Lorem ipsum
 | <code>&#124;</code> | <code>&#124;</code>                   |
 | true &#124; false   | c2                                    |
 | d1                  | also <code>pipe &#124; in code</code> |
+
+# Wiki links with pipes are especially tricky
+
+| a1        | a2                        |
+| --------- | ------------------------- |
+| [[Pg|As]] | [[Page#Anchor|AlsoAlias]] |

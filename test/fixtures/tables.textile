@@ -25,3 +25,8 @@ h1. Table with protected pipe chars
 | <code>&#124;</code> | @&#124;@  |
 | true<notextile> | </notextile>false | c2 |
 | d1 | also <code>pipe | in code</code> |
+
+h1. Wiki links with pipes are especially tricky
+
+|_. a1   |_. a2 |
+| [[Pg|As]] | [[Page#Anchor|AlsoAlias]] |
