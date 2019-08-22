@@ -48,7 +48,7 @@ module TextileToMarkdown
     TAG_AT = 'pandocIprotectedIatIsign'
     TAG_HASH = 'pandocIprotectedIhashIsign'
     TAG_FENCED_CODE_BLOCK = 'pandocIforceItoIouputIfencedIcodeIblock'
-    TAG_LINE_BREAK_IN_QTAG = '<br class="pandocIprotectIlineIbreakIinIqtag" />'
+    TAG_LINE_BREAK_IN_QTAG = ' <br class="pandocIprotectIlineIbreakIinIqtag" />'
     TAG_BREAK_NOTEXTILE_2EQS = 'pandocIbreakInotextileI2eqs'
 
     TAG_NOTHING = 'pandocInothingIwillIbeIhere'
@@ -382,20 +382,23 @@ module TextileToMarkdown
         offcode1 = md[:offcode1].to_i
         # redmine mangles pre block if it contains code, let's be better
         real_code = md[:codeopen] && @pre_list[offcode1] =~ /^<pre[^>]*>.*[\S]/m
+
         offcode = if md[:offcode2] and !real_code then md[:offcode2].to_i else offcode1 end
 
         @pre_list[offcode1] = @pre_list[offcode].sub(/^<(?:code|pre)\b(\s+class="[^"]+")?/) do
           preparam = if $1 then $1 else " class=\"#{TAG_FENCED_CODE_BLOCK}\"" end
           "<pre#{preparam}"
         end
+        out = md[:out]
         if real_code
-          pre_content = "#{md[:codeopen]}#{md[:out]}#{md[:codeclose1]}".dup
+          pre_content = "#{md[:codeopen]}#{out}#{md[:codeclose1]}".dup
+          out = ''
           smooth_offtags pre_content
           @pre_list[offcode1] += pre_content
-        else
-          @pre_list[offcode1] += md[:out] unless md[:out].empty?
         end
-        "#{md[:preopen]}</pre>#{codeclose2}#{md[:spacepastpreclose]}"
+        # eat </code> if it is opened and <pre> is closed by EOF
+        out.sub!(/<\/code>\s*$/m, '') if md[:codeopen] 
+        "#{md[:preopen]}#{out}</pre>#{codeclose2}#{md[:spacepastpreclose]}"
       end
 
       no_textile textile
@@ -602,8 +605,8 @@ module TextileToMarkdown
        ".B#{flavour}#{make_placeholder(out)}E#{flavour}."
       end
 
-      # parenthesis and brackets in qtags get misinterpteted
-      textile.gsub!(/(?<=#{TAG_PH_END}Eqtag)[{(\[]|[})\]](?=Bqtag#{TAG_PH_BEGIN})/) do |m|
+      # parenthesis, brackets and equal signs in qtags get misinterpteted
+      textile.gsub!(/(?<=#{TAG_PH_END}Eqtag)[{(\[=]|[})\]=](?=Bqtag#{TAG_PH_BEGIN})/) do |m|
         qtag_ph = ".Bany#{make_placeholder(m)}Eany."
       end
 
@@ -769,7 +772,7 @@ module TextileToMarkdown
 
       # Make use of Redmine's underline syntax (span does not work)
       # TODO: allow multiline while protecting code blocks ... but don't have a use case for it now
-      markdown.gsub!(/<span class="underline">([^\n]*?)<\/span>/, "_\\1_")
+      markdown.gsub!(/<span class="underline">(.*?)<\/span>/m, "_\\1_")
 
       # Add newlines around indented fenced blocks to fix in-list code blocks
       # And restore protected sequences that are restored differently in code blocks
@@ -803,6 +806,8 @@ module TextileToMarkdown
 
       # restore macro-like protected elements
       markdown.gsub!(/\{\{MDCONVERSION(\w+)\}\}/) { pop_fragment $1 }
+      # and the eventual placeholders in them
+      markdown.gsub!(TAG_AT, '@')
 
       expand_blockqutes markdown
 
