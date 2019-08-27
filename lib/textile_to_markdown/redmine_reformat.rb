@@ -1,4 +1,11 @@
+# Redmine Textile reformatter allowing to be processed to Markdown
+# Currently uses pandoc, but it would make more sense to output Markown directly
+#
+# Written by Martin Cizek, Orchitech Solutions
+# Contains portions of Redmine and Redcloth3 code
+
 require 'textile_to_markdown/redmine_reformat/placeholders'
+require 'textile_to_markdown/markdown-table-formatter/table-formatter'
 require 'htmlentities'
 
 module TextileToMarkdown
@@ -29,7 +36,6 @@ module TextileToMarkdown
     PANDOC_WORD_BOUNDARIES = PANDOC_MARKUP_CHARS + PANDOC_STRING_BREAKERS
 
     # Tag constants
-    TAG_AT = 'pandocIprotectedIatIsign'
     TAG_FENCED_CODE_BLOCK = 'pandocIforceItoIouputIfencedIcodeIblock'
     TAG_LINE_BREAK_IN_QTAG = ' <br class="pandocIprotectIlineIbreakIinIqtag" />'
 
@@ -38,13 +44,15 @@ module TextileToMarkdown
     TEXTILE_HR_MATCH_CONTEXT = 'hr<random><ph>'
     TABLE_PIPE_MATCH_CONTEXT = '.tp<ph>' # should match the length of #PIPE_HTMLENT
     REAL_QTAG_RESTORE_MATCH_CONTEXT = 'qtag<random><ph>'
+    MACRO_MATCH_CONTEXT = '{{MdConversionMacro<random><ph>}}'
+    FENCED_CODE_BLOCK_MATCH_CONTEXT = '{{MdConversionFencedCode<random><ph>}}'
 
     # Special matches
     PIPE_HTMLENT_MATCH = '&vert;|&#124;|&#[xX]7[cC];'
     PIPE_HTMLENT = '&#124;'
 
-    def initialize_reformatter(text)
-      @ph = Placeholders.new(text)
+    def initialize_reformatter(text, reference)
+      @ph = Placeholders.new(text, reference)
       @ph.prepare_text(text)
       @pre_list = []
     end
@@ -63,6 +71,25 @@ module TextileToMarkdown
       text.gsub!(/\n{3,}/, "\n\n")
       # this is probably counterproductive:
       # text.gsub!(/"$/, '" ')
+    end
+
+    # Rip redmine macros, so they don't get corrupted
+    def rip_macros textile
+      textile.gsub!(/^!?\{\{(.+?)\}\}/m) do |m|
+        macro = $1
+        if macro =~ /<redpre \w+ \d+>/
+          m # avoid cross-matching with offtags
+        elsif macro =~ /\A\s*collapse/
+          m # collapse macro should contain textile, so keep it
+        else
+          @ph.ph_for(m, :none, MACRO_MATCH_CONTEXT, :inherit)
+        end
+      end
+      # https://github.com/tckz/redmine-wiki_graphviz_plugin
+      textile.gsub!(/^.*\{\{\s*graphviz_me.*/m) do |m|
+        smooth_offtags m, true
+        @ph.ph_for(m, :none, MACRO_MATCH_CONTEXT, :inherit)
+      end
     end
 
     #
@@ -163,6 +190,8 @@ module TextileToMarkdown
           preparam = if $1 then $1 else " class=\"#{TAG_FENCED_CODE_BLOCK}\"" end
           "<pre#{preparam}"
         end
+        # avoid any further work with the merged offtag contents
+        @pre_list[md[:offcode2].to_i] = nil if md[:offcode2]
         out = md[:out]
         if raw_code
           pre_content = "#{md[:codeopen]}#{out}#{md[:codeclose1]}".dup
@@ -176,10 +205,22 @@ module TextileToMarkdown
       end
     end
 
-    def smooth_offtags(text)
+    # Preprocess non-interpreted sections for latter postprocessing
+    def protect_offtag_contents
+      @pre_list.map! do |code|
+        code.gsub(/[!+_*{}\[\]-]/) {|m| @ph.ph_for(m, :none, :aftercode)} if code
+      end
+    end
+
+    def smooth_offtags(text, clean = false)
       unless @pre_list.empty?
         ## replace <pre> content
-        text.gsub!(/<redpre \w+ (\d+)>/) { @pre_list[$1.to_i] }
+        text.gsub!(/<redpre \w+ (\d+)>/) do
+          i = $1.to_i
+          res = @pre_list[i]
+          @pre_list[i] = nil if clean
+          res
+        end
       end
     end
 
@@ -364,6 +405,12 @@ module TextileToMarkdown
         # Redmine links are apparently subset of what Pandoc treats as a link
         if !ptext.include?('<br />') && !purl.include?('<br />') && m =~ LINK_RE
           all,pre,fulltext,atts,text,title,url,proto,slash,post = $~[1..10]
+          # Idea below : an URL with unbalanced parethesis and
+          # ending by ')' is put into external parenthesis
+          if ( url[-1]==?) and ((url.count("(") - url.count(")")) < 0 ) )
+            url=url[0..-2] # discard closing parenth from url
+            post = ")"+post # add closing parenth to post
+          end
           # Redmine does not recognize bracketed version while Pandoc does
           pre.sub!(/\[$/, '&#91;') if pre
           # URL encoding still looks better than backslash escaping in the URL
@@ -406,7 +453,8 @@ module TextileToMarkdown
           end
         end
       end
-      text.gsub!(/@/, TAG_AT) # all @ that do not demark code
+      # all @ that do not demark code
+      text.gsub!(/@/) {|m| @ph.ph_for(m, :none)}
     end
 
     def protect_wiki_links(text)
@@ -567,7 +615,7 @@ module TextileToMarkdown
     def protect_qtag_chars(text)
       # FIXME: Add more qtags acording to issue sheet
       text.gsub!(/(?<!\|)[*_+-](?!\|)/) do |m|
-        @ph.ph_for(newqtag, :both, :qtag)
+        @ph.ph_for(m, :both, :qtag)
       end
     end
 
@@ -575,7 +623,7 @@ module TextileToMarkdown
     # expect: placeholderized real qtags
     def protect_qtag_surroundings(text)
       qrmatch = @ph.match_context_match(REAL_QTAG_RESTORE_MATCH_CONTEXT)
-      text.gsub!(/([{(\[=])?(#{qrmatch})([})\]=])?/) do
+      text.gsub!(/([})\]=])?(#{qrmatch})([{(\[=])?/) do
         op, qrph, clo = $~[1..3]
         op = @ph.ph_for(op, :both) if op
         clo = @ph.ph_for(clo, :both) if clo
@@ -585,19 +633,19 @@ module TextileToMarkdown
 
     # restore real qtags for conversion
     def restore_real_qtags(text)
-      text.gsub!(/#{@ph.match_context_match(REAL_QTAG_RESTORE_MATCH_CONTEXT, nil)}/) do
+      text.gsub!(/#{@ph.match_context_match(REAL_QTAG_RESTORE_MATCH_CONTEXT, true)}/) do
         @ph.restore($1, :qtag)
       end
     end
 
     def restore_textile_lists(text)
-      text.gsub!(/#{@ph.match_context_match(TEXTILE_LIST_MATCH_CONTEXT, nil)}/) do
+      text.gsub!(/#{@ph.match_context_match(TEXTILE_LIST_MATCH_CONTEXT, true)}/) do
         @ph.restore($1, :qtag)
       end
     end
 
     def restore_textile_hrs(text)
-      text.gsub!(/#{@ph.match_context_match(TEXTILE_HR_MATCH_CONTEXT, nil)}/) do
+      text.gsub!(/#{@ph.match_context_match(TEXTILE_HR_MATCH_CONTEXT, true)}/) do
         @ph.restore($1, :qtag)
       end
     end
@@ -636,6 +684,212 @@ module TextileToMarkdown
           postesc = post.sub(/>/) {|m| @ph.ph_for(htmlcoder.encode(m), :both)}
           "#{leading}#{proto}#{urlesc}#{postesc}"
         end
+      end
+    end
+
+    def put_breaks_before_html_entities(text)
+      text.gsub!(/(?<=[\w\/])(&(?:#(?:[0-9]+|[Xx][0-9A-Fa-f]+)|[A-Za-z0-9]+);)/) do
+        start = $1
+        "#{@ph.ph_for(nil, :right)}#{start}"
+      end
+    end
+
+    def protect_hashes textile
+      textile.gsub!(/(?<!&)#(?=\w)|(?<=[^\W&])#/) do |m|
+        @ph.ph_for(m, :none)
+      end
+    end
+
+    def put_blank_line_before_pre_in_list(text)
+      text.gsub!(/^([*#]+ [^\n]*)(<redpre pre)\b/, "\\1\n\\2")
+    end
+
+    def protect_symbols(text)
+      # copyright
+      text.gsub!(/(?<=\()[cC](?=\))/) do |m|
+        @ph.ph_for(m, :none)
+      end
+    end
+
+    def prefer_inline_code_over_html(text)
+      htmlcoder = HTMLEntities.new
+      text.gsub!(/<redpre code (\d+)>\s*<\/code>/) do |m|
+        prei = $1.to_i
+        code = @pre_list[prei].sub(/^<code\b([^>]*)>/, '')
+        codeparam = $1
+        @pre_list[prei] = "<code>#{code}" if codeparam == ' at'
+
+        code.strip!
+        code = htmlcoder.decode(code)
+
+        escpipem = @ph.match_context_match(TABLE_PIPE_MATCH_CONTEXT)
+        if code.empty? or code.match? escpipem or (codeparam != ' at' and code.include? "\n")
+          # cannot convert to @
+          m
+        else
+          # use placehoder for @
+          code.gsub!(/@/) {|m| @ph.ph_for(m, :none)}
+          "#{@ph.ph_for(nil, :right)}@#{code}@#{@ph.ph_for(nil, :left)}"
+        end
+      end
+    end
+
+    def protect_eq_sequences(text)
+      text.gsub!(/={2,}/) do |m|
+        @ph.ph_for_each(m, :both, :qtag)
+      end
+    end
+
+    ### Postprocessing
+
+    def expand_blockqutes(text)
+      qlevel = 0
+      skip_empty_line = false
+      # eat two NLs before and two NLs or end of file after
+      text.gsub!(%r{^((<blockquote>)|((\n)?</blockquote>))?([^\n]*$\n?)}) do
+        tag = $1
+        tagstart = $2
+        tagend = $3
+        nl_before_tagend = $4
+        regline = $5
+        output = ''
+        if tag.nil?
+          empty_line = regline == "\n"
+          separator = qlevel > 0 && !empty_line  ? ' ' : ''
+          if skip_empty_line && empty_line
+            # nothing
+          else
+            output = "#{'>' * qlevel}#{separator}#{regline}"
+          end
+          skip_empty_line = false
+        elsif tagend.nil?
+          qlevel += 1
+          #  if qlevel == 1
+          skip_empty_line = true
+        else
+          # Apparently not needed - keep the list compact
+          # output = "#{'>' * qlevel}\n" if nl_before_tagend and (qlevel > 1)
+          qlevel -= 1 unless qlevel.zero?
+          skip_empty_line = false
+        end
+        output
+      end
+    end
+
+    def restore_protected_line_breaks(text)
+      text.gsub!(TAG_LINE_BREAK_IN_QTAG, "  \n")
+    end
+
+    def md_remove_auxiliary_code_block_lang(text)
+      text.gsub!(' ' + TAG_FENCED_CODE_BLOCK, '')
+    end
+
+    def restore_context_free_placeholders(text)
+      text.gsub!(/#{Placeholders::UNICODE_1CHAR_PRIV_OPTBREAKS_MATCH}/) do |m|
+        @ph.restore(m)
+      end
+    end
+
+    QTAG_CHAR_RESTORE_RE = /
+      (?<pre>
+        (?<atstart>^[[:blank:]]*)
+        |(?<word1>\w)
+        |
+      )
+      (?<ph>#{Placeholders::UNICODE_1CHAR_PRIV_OPTBREAKS_MATCH})
+      (?<post>
+        (?<word2>\w)
+        |
+      )
+    /x
+
+    def restore_qtag_chars_to_md(text)
+      text.gsub!(QTAG_CHAR_RESTORE_RE) do
+        pre = $~[:pre]
+        post = $~[:post]
+        atstart = $~[:atstart]
+        inword = $~[:word1] && $~[:word2]
+        ph = $~[:ph]
+        replaced = @ph.restore(ph, :qtag) do |qtag|
+          esc = case qtag
+          when '+', '-', '='
+            '\\' if atstart
+          when '_'
+            '\\' unless inword
+          else
+            '\\'
+          end
+          "#{esc}#{qtag}"
+        end
+        "#{pre}#{replaced}#{post}"
+      end
+    end
+
+    def md_separate_lists_redmine_friendly(text)
+      text.gsub!(/\n\n<!-- end list -->\n/, "\n\n&#29;\n")
+    end
+
+    def md_polish_before_code_restore(text)
+      # Escaped exclamation marks look weird in normal text and the only special meaning in MD
+      # should be before '['. And Redmine link cancelation works both with ! and \!
+      text.gsub!(/\\(!)(?!\[)/, '\\1')
+      # Remove MD line break after collapse macro
+      text.gsub!(/(\{\{collapse\([^\n]*)[ ]{2}$/, '\\1')
+    end
+
+    def restore_aftercode_placeholders(text)
+      text.gsub!(/#{Placeholders::UNICODE_1CHAR_PRIV_OPTBREAKS_MATCH}/) do |m|
+        @ph.restore(m, :aftercode)
+      end
+    end
+
+    def smooth_macros(text)
+      text.gsub!(/#{@ph.match_context_match(MACRO_MATCH_CONTEXT, true)}/) do
+        @ph.restore($1, MACRO_MATCH_CONTEXT)
+      end
+    end
+
+    def normalize_and_rip_fenced_code_blocks(text)
+      # Add newlines around indented fenced blocks to fix in-list code blocks
+      # And restore protected sequences that are restored differently in code blocks
+      text.gsub!(/^(?'indent1' *)(?'fence'~~~|```)(?'infostr'[^~`\n]*)\n(?'codeblock'(^(?! *\k'fence')[^\n]*\n)*)^(?'indent2' *)\k'fence' *$\n?/m) do
+        indent1, fence, infostr, codeblock, indent2 = $~[:indent1], $~[:fence], $~[:infostr], $~[:codeblock], $~[:indent2]
+        # keep codeblocks away of further processing
+        codeblock = @ph.ph_for(codeblock, :none, FENCED_CODE_BLOCK_MATCH_CONTEXT, :inherit)
+        if indent1.empty?
+          "#{fence}#{infostr}\n#{codeblock}#{indent2}#{fence}\n"
+        else
+          "\n#{indent1}#{fence}#{infostr}\n#{codeblock}#{indent2}#{fence}\n\n"
+        end
+      end
+    end
+
+    def smooth_fenced_code_blocks(text)
+      text.gsub!(/#{@ph.match_context_match(FENCED_CODE_BLOCK_MATCH_CONTEXT, true)}/) do
+        @ph.restore($1, FENCED_CODE_BLOCK_MATCH_CONTEXT)
+      end
+    end
+
+    def md_use_redmine_underline(text)
+      text.gsub!(/<span class="underline">(.*?)<\/span>/m, "_\\1_")
+    end
+
+    def md_reformat_tables(text)
+      text.gsub!(/(^\|[^\n]+\|$\n)+/m) do |table|
+        begin
+          table = MarkdownTableFormatter.new(table).to_md
+        rescue
+          # keep it as it is
+          STDERR.puts("[WARNING] #{@reference} - reformatting MD table failed")
+        end
+        table
+      end
+    end
+
+    def restore_after_table_reformat_placeholders(text)
+      text.gsub!(Placeholders::UNICODE_1CHAR_PRIV_NOBREAKERS_RE) {|ph| @ph.restore(ph, :after_table_reformat)}
+      text.gsub!(/#{@ph.match_context_match(TABLE_PIPE_MATCH_CONTEXT, true)}/) do
+        @ph.restore($1, TABLE_PIPE_MATCH_CONTEXT)
       end
     end
 

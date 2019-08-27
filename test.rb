@@ -42,7 +42,7 @@ Dir.glob("#{test_pattern}.textile").each do |textile|
   name = textile.sub(/\.textile$/, '')
 
   input = File.read(textile)
-  actual = TextileToMarkdown::ConvertString.(input)
+  actual = TextileToMarkdown::ConvertString.(input, name)
 
   if show_diff
     expected = File.read(md)

@@ -3,3 +3,17 @@ h1. Exclamation mark
 Should not be placed here!
 Backslashed should be preserved \!
 Even in @code ! \! \\! \!!@
+
+h1. Hash
+
+An issue number #123
+#123 is a good issue.
+
+# 123 is not an issue.
+
+h1. Copyright
+
+Copyright (c) 2019.
+Not copyright c) ...
+c) not copyright
+[[Wiki]] (c)
