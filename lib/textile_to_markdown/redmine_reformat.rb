@@ -874,6 +874,10 @@ module TextileToMarkdown
       text.gsub!(/<span class="underline">(.*?)<\/span>/m, "_\\1_")
     end
 
+    def remove_init_breakers(text)
+      @ph.remove_breakers text, :init
+    end
+
     def md_reformat_tables(text)
       text.gsub!(/(^\|[^\n]+\|$\n)+/m) do |table|
         begin

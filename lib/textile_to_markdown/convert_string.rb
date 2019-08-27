@@ -149,6 +149,8 @@ module TextileToMarkdown
       smooth_macros markdown
       normalize_and_rip_fenced_code_blocks markdown
       md_use_redmine_underline markdown
+      # This should be the very last thing to break text length in table
+      remove_init_breakers markdown
       md_reformat_tables markdown
       smooth_fenced_code_blocks markdown
       # restore placeholders preserving text length

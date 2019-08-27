@@ -1,0 +1,16 @@
+h1. Implementation-specific placeholders
+
+h2. String breaker placeholders
+
+«» «.»« »« » «
+Formatting would not be applied if placeholderized breaker is not a breaker: «*«Intredasting»*«
+
+Table would be unaligned if breaker placeholder break text length:
+
+|_. h1 |_. h2 |
+| xx | «xx» |
+
+h2. Characters in placeholder range
+
+This is from a real instance:  :-)
+Stress-test: «»«» «»«» «»«»

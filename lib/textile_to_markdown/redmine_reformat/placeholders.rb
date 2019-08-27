@@ -28,6 +28,11 @@ module TextileToMarkdown
         @match_context_phs = Hash.new {|h,k| h[k]=[]}
       end
 
+      # Place initial placeholders to allow furhter processing.
+      # The result has to extend the text to keep string breaker semantics.
+      # Use #remove_breakers with the :init context to revert it
+      # before text-length sensitive processing.
+      # See https://github.com/jgm/pandoc/blob/master/src/Text/Pandoc/Readers/Textile.hs#L500
       def prepare_text(text)
         text.gsub!(/[«»]/) do |m|
           ph_for(m, :both, :init)
@@ -35,12 +40,13 @@ module TextileToMarkdown
       end
 
       def finalize_text(text)
+        remove_breakers text, :init
         text.scan(/[«»]/) do |m|
           warn("a string breaker '#{m}' likely leaked to the output MD")
         end
-        text.gsub!(UNICODE_1CHAR_PRIV_BREAKERS_RE) {|ph| restore(ph, :init)}
+        text.gsub!(UNICODE_1CHAR_PRIV_NOBREAKERS_RE) {|ph| restore(ph, :init)}
         text.scan(UNICODE_1CHAR_PRIV_NOBREAKERS_RE) do |m|
-          if !@occupied_char_placeholders.include? m
+          if !@occupied_char_placeholders.include? m.ord
             warn("a placeholder ord(#{m.ord}) likely leaked to the output MD")
           end
         end
@@ -131,6 +137,24 @@ module TextileToMarkdown
           end
           end
           "#{pre}#{lbreaker}#{restored}#{rbreaker}"
+        end
+      end
+
+      REMOVE_BREAKERS_RE = /
+        («)?                                    # $lbreaker
+        (#{UNICODE_1CHAR_PRIV_NOBREAKS_MATCH})  # $phchar
+        (»)?                                    # $rbreaker
+      /x
+      def remove_breakers(text, context = nil)
+        text.gsub!(REMOVE_BREAKERS_RE) do |m|
+          lbreaker, phchar, rbreaker = $~[1..3]
+          if lbreaker || rbreaker
+            phchar = restore1(phchar, context) do |r|
+              lbreaker = rbreaker = nil
+              ph_for(r, :none, context)
+            end
+          end
+          "#{lbreaker}#{phchar}#{rbreaker}"
         end
       end
 
