@@ -98,7 +98,9 @@ module TextileToMarkdown
     end
 
     def migrate_wiki_versions
-      STDERR.puts "Wiki versions: #{WikiContent::Version.count}"
+      all = WikiContent::Version.count
+      STDERR.puts "Wiki versions: converting #{all} historic content revisions"
+      finished = 0
       WikiContent::Version.find_each do |version|
         if textile = version.text
           if md = convert(textile, "WikiContent::Version\##{version.id}")
@@ -109,6 +111,10 @@ module TextileToMarkdown
           else
             STDERR.puts "failed to convert wiki version #{version.id}"
           end
+        end
+        finished += 1
+        if finished % BATCHSIZE == 0 || finished == all
+          STDERR.puts "Wiki versions: finished #{finished} of #{all}"
         end
       end
     end
@@ -162,9 +168,9 @@ module TextileToMarkdown
 
         rows.each{|r| yield r}
         finished += row_count
+        STDERR.puts "#{scope.table_name}: finished #{finished} of #{notnull}"
 
         break if row_count < BATCHSIZE
-        STDERR.puts "#{scope.table_name}: finished #{finished} of #{notnull}"
         rows = scope.where("id > ?", offset).pluck(:id, attribute)
       end
     end

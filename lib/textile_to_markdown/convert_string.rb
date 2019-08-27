@@ -8,10 +8,13 @@ require 'tempfile'
 require 'timeout'
 require 'securerandom'
 require 'htmlentities'
+require 'textile_to_markdown/redmine_reformat'
 require 'textile_to_markdown/markdown-table-formatter/table-formatter'
 
 module TextileToMarkdown
   class ConvertString
+
+
     # receives textile, returns markdown
     def self.call(textile, reference = nil)
       new(textile, reference).call
@@ -22,7 +25,6 @@ module TextileToMarkdown
       @reference = reference
       @fragments = {}
       @placeholders = []
-      init_char_phs(@textile)
     end
 
     def call
@@ -43,14 +45,11 @@ module TextileToMarkdown
     end
 
     private
+    include TextileToMarkdown::RedmineReformat
 
-    # treat '==' as <notextile> ?
-    CONF_NOTEXTILE_2EQS = false
-
-    TAG_AT = 'pandocIprotectedIatIsign'
+    TAG_AT = 'pandocIprotectedIatIsign' #TBD remove
     TAG_HASH = 'pandocIprotectedIhashIsign'
-    TAG_FENCED_CODE_BLOCK = 'pandocIforceItoIouputIfencedIcodeIblock'
-    TAG_LINE_BREAK_IN_QTAG = ' <br class="pandocIprotectIlineIbreakIinIqtag" />'
+    TAG_FENCED_CODE_BLOCK = 'pandocIforceItoIouputIfencedIcodeIblock' #TBD remove
     TAG_BREAK_NOTEXTILE_2EQS = 'pandocIbreakInotextileI2eqs'
 
     TAG_NOTHING = 'pandocInothingIwillIbeIhere'
@@ -66,304 +65,6 @@ module TextileToMarkdown
     PH_RE = "#{TAG_PH_BEGIN}([0-9]+)#{TAG_PH_END}"
     PH_RE_NOCAP = "#{TAG_PH_BEGIN}[0-9]+#{TAG_PH_END}"
 
-    PIPE_HTMLENT_MATCH = '&vert;|&#124;|&#[xX]7[cC];'
-
-    UNICODE_1CHAR_PRIV_START = "\uE000"
-    UNICODE_1CHAR_PRIV_END = "\uF8FF"
-    UNICODE_1CHAR_PRIV_RE = /[#{UNICODE_1CHAR_PRIV_START}-#{UNICODE_1CHAR_PRIV_END}]/
-
-    # prepare 1-char placeholders from Unicode's Private Use Area
-    # this approach might have been utilized more if introduced earlier :)
-    def init_char_phs(text)
-      @occupied_char_placeholders = Set.new(text.scan(UNICODE_1CHAR_PRIV_RE).collect {|c| c.ord})
-      @char_ph_unused = UNICODE_1CHAR_PRIV_START.ord
-      @char_phs = []
-      @ph_chars = []
-    end
-
-    def ph_for_char(char)
-      i = @ph_chars.index(char)
-      if i.nil?
-        i = @ph_chars.length
-        @char_ph_unused += 1 while @occupied_char_placeholders.include? @char_ph_unused
-        raise 'Run out of 1-char placeholders' if @char_ph_unused > UNICODE_1CHAR_PRIV_END.ord
-        @ph_chars << char
-        @char_phs << @char_ph_unused
-        @char_ph_unused += 1
-      end
-      @char_phs[i].chr(Encoding::UTF_8)
-    end
-
-    def char_for_ph(ph)
-      i = @char_phs.index(ph.ord)
-      if i.nil? then ph else @ph_chars[i] end
-    end
-
-    def no_textile(text)
-      return unless CONF_NOTEXTILE_2EQS
-      text.gsub!(/(^|\s)==([^=]+.*?)==(\s|$)?/,
-                 '\1<notextile>\2</notextile>\3')
-      text.gsub!(/^ *==([^=]+.*?)==/m,
-                 '\1<notextile>\2</notextile>\3')
-    end
-
-    # Redmine way of normalizing
-    def clean_white_space(text)
-      # normalize line breaks
-      text.gsub!(/\r\n?/, "\n")
-      text.gsub!(/\t/, '    ')
-      text.gsub!(/^ +$/, '')
-      text.gsub!(/\n{3,}/, "\n\n")
-      # this is probably counterproductive:
-      # text.gsub!(/"$/, '" ')
-    end
-
-    QUOTES_RE = /(^>+([^\n]*?)(\n|$))+/m.freeze
-    QUOTES_CONTENT_RE = /^([> ]+)(.*)$/m.freeze
-
-    def block_textile_quotes(text)
-      text.gsub!(QUOTES_RE) do |match|
-        lines = match.split(/\n/)
-        quotes = String.new
-        indent = 0
-        lines.each do |line|
-          line =~ QUOTES_CONTENT_RE
-          bq = $1
-          content = $2
-          l = bq.count('>')
-          if l != indent
-            quotes << ("\n\n" + (l > indent ? '<blockquote>' * (l - indent) : '</blockquote>' * (indent - l)) + "\n\n")
-            indent = l
-          end
-          quotes << (content + "\n")
-        end
-        quotes << ("\n" + '</blockquote>' * indent + "\n\n")
-        quotes
-      end
-    end
-
-    #
-    # Flexible HTML escaping
-    #
-    def htmlesc(str, mode = :Quotes)
-      if str
-        str.gsub!('&', '&amp;')
-        str.gsub!('"', '&quot;') if mode != :NoQuotes
-        str.gsub!("'", '&#039;') if mode == :Quotes
-        str.gsub!('<', '&lt;')
-        str.gsub!('>', '&gt;')
-      end
-      str
-    end
-
-    OFFTAG_TAGS = 'code|pre|kbd|notextile'
-    OFFTAGS = /(#{OFFTAG_TAGS})/.freeze
-    OFFTAG_MATCH = %r{(?:(</#{OFFTAGS}\b>)|(<#{OFFTAGS}\b[^>]*>))(.*?)(?=</?#{OFFTAGS}\b\W|\Z)}mi.freeze
-
-    def rip_offtags(text, escape_aftertag = true, escape_line = true)
-      if text =~ /<.*>/
-        ## strip and encode <pre> content
-        codepre = 0
-        used_offtags = {}
-        text.gsub!(OFFTAG_MATCH) do |line|
-          if $3
-            first = $3
-            offtag = $4
-            aftertag = $5
-            codepre += 1
-            used_offtags[offtag] = true
-            if codepre - used_offtags.length > 0
-              htmlesc(line, :NoQuotes) if escape_line
-              @pre_list[-1] = @pre_list.last + line
-              line = ''
-            else
-              ### htmlesc is disabled between CODE tags which will be parsed with highlighter
-              ### Regexp in formatter.rb is : /<code\s+class="(\w+)">\s?(.+)/m
-              ### NB: some changes were made not to use $N variables, because we use "match"
-              ###   and it breaks following lines
-              htmlesc(aftertag, :NoQuotes) if aftertag && escape_aftertag && !first.match(/<code\s+class="(\w+)">/)
-              line = "<redpre #{offtag} #{@pre_list.length}>"
-              first.match(/<#{OFFTAGS}([^>]*)>/)
-              tag = $1
-              $2.to_s.match(/(class\=("[^"]+"|'[^']+'))/i)
-              tag << " #{$1}" if $1 && tag == 'code'
-              @pre_list << "<#{tag}>#{aftertag}"
-            end
-          elsif $1 && (codepre > 0)
-            if codepre - used_offtags.length > 0
-              htmlesc(line, :NoQuotes) if escape_line
-              @pre_list[-1] = @pre_list.last + line
-              line = ''
-            end
-            codepre -= 1 unless codepre.zero?
-            used_offtags = {} if codepre.zero?
-          end
-          line
-        end
-      end
-      text
-    end
-
-    # Merge <pre><code>... to <pre>...
-    # Allow also for swapping closing offtags, which is tolerated by Redmine
-    def merge_pre_code_offtags(text)
-      text.gsub!(
-        %r{
-          (?<preopen><redpre[ ]pre[ ](?<offcode1>\d+)>\s*)
-          (?<codeopen><redpre[ ]code[ ](?<offcode2>\d+)>)?
-          (?<out>.*?)
-          (?<preclose>
-            (?<codeclose1></code[ ]*>)?
-            \s*
-            </pre[ ]*>
-            (?<spacepastpreclose>\s*)
-            (?<codeclose2></code[ ]*>)?
-            |\Z
-          )
-        }xm) do |full|
-        md = $~
-        codeclose2 = md[:codeclose2]
-        codeclose2 = nil if md[:codeopen] and md[:codeclose1].nil?
-
-        offcode1 = md[:offcode1].to_i
-        # redmine mangles pre block if it contains code, let's be better
-        raw_code = @pre_list[offcode1] =~ /^<pre[^>]*>.*[\S]/m
-
-        offcode = if md[:offcode2] and !raw_code then md[:offcode2].to_i else offcode1 end
-
-        @pre_list[offcode1] = @pre_list[offcode].sub(/^<(?:code|pre)\b(\s+class="[^"]+")?/) do
-          preparam = if $1 then $1 else " class=\"#{TAG_FENCED_CODE_BLOCK}\"" end
-          "<pre#{preparam}"
-        end
-        out = md[:out]
-        if raw_code
-          pre_content = "#{md[:codeopen]}#{out}#{md[:codeclose1]}".dup
-          out = String.new
-          smooth_offtags pre_content
-          @pre_list[offcode1] += pre_content
-        end
-        # eat </code> if it is opened and <pre> is closed by EOF
-        out.sub!(/<\/code>\s*$/m, '') if md[:codeopen]
-        "#{md[:preopen]}#{out}</pre>#{codeclose2}#{md[:spacepastpreclose]}"
-      end
-    end
-
-    def smooth_offtags(text)
-      unless @pre_list.empty?
-        ## replace <pre> content
-        text.gsub!(/<redpre \w+ (\d+)>/) { @pre_list[$1.to_i] }
-      end
-    end
-
-    ALLOWED_TAGS = %w[redpre pre code kbd notextile].freeze
-    def escape_html_tags(text)
-      text.gsub!(%r{<(\/?([!\w]+)[^<>\n]*)(>)?}) do |_m|
-        if ALLOWED_TAGS.include?($2) && !$3.nil?
-          "<#{$1}#{$3}"
-        else
-          "&lt;#{$1}#{'>' if $3 =~ /[^[:space:]]/}"
-        end
-      end
-    end
-
-    # eat empty lines between indented continuations
-    def glue_indented_continuations(textile)
-      last_blank_line = ''
-      continuation = false
-      textile.gsub!(/^(([[:blank:]]*(([*#])+) )|([[:blank:]]))?([^\n]*$)(?:\n|\Z)/) do |line|
-        list, leading_space = !$2.nil?, !$5.nil?
-        list_prefix, list_type = $3, $4
-        rest = $6
-        tag_ended = (rest =~ /<\/[^\s>]+>/)
-        if list or tag_ended
-          continuation = true
-          res = "#{last_blank_line}#{line}"
-          last_blank_line = ''
-          res
-        elsif continuation
-          if leading_space
-            # eat eventual preceding blank line
-            last_blank_line = ''
-            line
-          elsif rest.empty?
-            # blank line - waiting for next line
-            last_blank_line = "\n"
-            ''
-          elsif last_blank_line.empty?
-            # just continuing
-            line
-          else
-            # blank line was present and we are not indented - finally ending continuation
-            continuation = false
-            res = "#{last_blank_line}#{line}"
-            last_blank_line = ''
-            res
-          end
-        else
-          last_blank_line = ''
-          # unindent heading (which is allowed by Redmine)
-          line.sub(/^[[:blank:]]+(h[1-6]\.[[:blank:]]+\S)/, '\\1')
-        end
-      end
-      textile << last_blank_line
-    end
-
-    def hard_break(text)
-      text.gsub!(/(.)\n(?!\Z| *((?:[#*=]+|list#{PH_RE_NOCAP})(\s|$)|[{|]))/, "\\1<br />")
-    end
-    def revert_hard_break(text)
-      text.gsub!(/<br \/>/, "\n")
-    end
-
-
-    QTAGS = [
-      ['**', '*'],
-      ['*'],
-      ['??', '_'],
-      ['-', nil],
-      ['__', '_'],
-      ['_', '_'],
-      ['%', nil],
-      ['+', nil],
-      ['^', nil],
-      ['~', nil]
-    ]
-    QTAGS_JOIN = QTAGS.map {|rc, ht| Regexp::quote rc}.join('|')
-
-    QTAGS.collect! do |rc, newrc|
-      rcq = Regexp::quote rc
-      newrc = rc if newrc.nil?
-      re =
-          /(^|[>\s\(])          # sta
-          (?!\-\-)
-          (#{QTAGS_JOIN}|Bqtag#{PH_RE_NOCAP}Eqtag|)      # oqs
-          (#{rcq})              # qtag
-          ([[:word:]]|[^\s].*?[^\s])    # content
-          (?!\-\-)
-          #{rcq}
-          (#{QTAGS_JOIN}|Bqtag#{PH_RE_NOCAP}Eqtag|)      # oqa
-          (?=[[:punct:]]|<|\s|\)|$)/x
-      [rc, newrc, re]
-    end
-
-    def inline_textile_span(text)
-      QTAGS.each do |qtag_rc, newqtag, qtag_re|
-        text.gsub!(qtag_re) do |m|
-          sta,oqs,qtag,content,oqa = $~[1..6]
-          # outplace leading and trailing line breaks, which Redmine supports
-          content.sub!(/^((?:<br \/>)+)/) {|brl| oqs << brl; ''}
-          content.sub!(/((?:<br \/>)+)$/) {|brr| oqa = "#{brr}#{oqa}"; ''}
-          if content =~ /\S/
-            content.gsub!(/<br \/>/, TAG_LINE_BREAK_IN_QTAG)
-            qtag_ph = make_placeholder(newqtag)
-            "#{sta}#{oqs}Bqtag#{qtag_ph}Eqtag#{content}Bqtag#{qtag_ph}Eqtag#{oqa}"
-          else
-            "#{sta}#{oqs}#{oqa}"
-          end
-        end
-      end
-    end
-
     # Preprocess / protect sequences in offtags and @code@ that are treated differently in interpreted code
     def common_code_pre_process(code)
       # allow for escaping/unescaping these characters in special contexts
@@ -372,45 +73,12 @@ module TextileToMarkdown
       end
     end
 
-    AUTO_LINK_RE = %r{
-                    (                          # leading text
-                      <\w+[^>]*?>|             # leading HTML tag, or
-                      [\s\(\[,;]|              # leading punctuation, or
-                      ^                        # beginning of line
-                    )
-                    (
-                      (?:https?://)|           # protocol spec, or
-                      (?:s?ftps?://)|
-                      (?:www\.)                # www.*
-                    )
-                    (
-                      ([^<]\S*?)               # url
-                      (\/)?                    # slash
-                    )
-                    ((?:&gt;)?|[^[:alnum:]_\=\/;\(\)]*?)               # post
-                    (?=<|\s|$)
-                    }x
 
-    # Protect in-link sequences that causes issues to poandoc
-    def protect_autolinks(text)
-      text.gsub!(AUTO_LINK_RE) do
-        all, leading, proto, url, post = $&, $1, $2, $3, $6
-        if leading =~ /<a\s/i || leading =~ /![<>=]?/
-          # don't replace URLs that are already linked
-          # and URLs prefixed with ! !> !< != (textile images)
-          all
-        else
-          urlesc = url.gsub(/[#&_!\[\]\\-]/) {|m| "Bcodeword#{make_placeholder(m)}Ecodeword"}
-          postesc = post.sub(/>/, ".Bany#{make_placeholder('&gt;')}Eany.")
-          "#{leading}#{proto}#{urlesc}#{postesc}"
-        end
-      end
-    end
 
     def pre_process_textile(textile)
 
       clean_white_space textile
-
+      initialize_reformatter textile
       ## Code sections
 
       # temporarily remove redmine macros (and some other stuff thats better
@@ -430,11 +98,8 @@ module TextileToMarkdown
       textile.gsub!(/^(.*\{\{\s*graphviz_me.*)/m){ "{{MDCONVERSION#{push_fragment($1)}}}" }
 
       # Do not interfere with protected blocks
-      @pre_list = []
       rip_offtags textile, false, false
-
-      # pandoc does not create fenced code blocks when there is leading whitespace
-      textile.gsub!(/^[[:blank:]]+(?=<redpre pre\b)/, '')
+      unindent_pre_offtag textile
 
       # Move the class from <code> to <pre> and remove <code>, so pandoc can generate a code block with correct language
       merge_pre_code_offtags textile
@@ -443,74 +108,20 @@ module TextileToMarkdown
       escape_html_tags textile
       block_textile_quotes textile
 
-      # preserve horizontal rules, so that they are not considered 'free qtags'
-      # also strip whitespace around it - allowed by Redmine, but would break further processing
-      textile.gsub!(/((?:\n\n|\A\n?))[[:blank:]]*(-{3,})[[:blank:]]*((?:\n\n|\n?\Z))/m) do
-        before, hr, after = $~[1..3]
-        "#{before}Bhr#{make_placeholder hr}Ehr#{after}"
-      end
+      # strip surrounding whitespace, which is allowed by Redmine, but would break further processing
+      # temprarily placeholderize at the same time to avoid confusion with 'free qtags'
+      normalize_hr_to_phs textile
 
       # make sure that empty lines mean new block
       glue_indented_continuations textile
 
-      # blocks starting with a leading space are either space-indented lists or code blocks
-      # pandoc treats them diferrently than Redmine, so remove leading spaces and add <pre> tags for non-lists
-      #
-      # Update: redmine made its Textile interpreting stricter between 3.4.2 and 3.4.11 and
-      # space-indented multi-level lists do not work anymore. This code solves it as a side effect :)
-      textile.gsub!(/(\A\n?|\n\n)^((?: (?!<redpre))+)((?:.(?!<redpre))+?)(?=\n?\Z|\n\n)/m) do |block|
-        prefix = $1
-        strip_spaces = $2.length
-        postfix = $4
-        list = false
-        code_block = $3.split("\n").map do |line|
-          line.sub!(/^ {#{strip_spaces}}/, '')
-          list = true if line =~ /^[*#]+ /
-          line
-        end.join("\n")
-        if list
-          "#{prefix}\n#{code_block}#{postfix}"
-        elsif prefix == "\n\n"
-          # indented code must not be at the beginning of file
-          @pre_list << "<pre class=\"#{TAG_FENCED_CODE_BLOCK}\">\n#{code_block}\n"
-          "#{prefix}\n<redpre pre #{@pre_list.length - 1}></pre>#{postfix}"
-        else
-          block
-        end
-      end
+      # extrect indented code and unindent lists
+      process_indented_blocks textile
 
-      # Match inline code in RedCloth3 way and address these issues:
-      # - Redmine support @ inside inline code marked with @ (such as "@git@github.com@"), but not pandoc.
-      # - Redmine's inline code also gets html entities interpreted in Textile, but not in Markdown
-      # - some sequences will be pre/postprocessed in normal text - protect them in code
-      htmlcoder = HTMLEntities.new
-      # replace hard line breaks temporarily to support @multiline code@ matching
+      # replace hard line breaks temporarily to support @multiline code@ and avoid "multi line":links
       hard_break textile
-      textile.gsub!(/(?<!\w)@(?:\|(\w+?)\|)?(.+?)@(?!\w)/) do |m|
-        # lang = $1 # lang is ignored even by Redmine
-        code = $2
-
-        if m =~ /<redpre \w+ \d+>/
-          # offtag accidentaly matched - Redmine 3.4.2 fails on this, let's be better
-          m
-        else
-          revert_hard_break code
-
-          # tighten the code span
-          lspace = rspace = ''
-          code.match(/^\s+/) {|s| lspace = s}
-          code.match(/\s+$/) {|s| rspace = s}
-          code.strip!
-
-          if code.empty?
-            "#{lspace}#{rspace}"
-          else
-            @pre_list << "<code at>#{code}"
-            "#{lspace}<redpre code #{@pre_list.length - 1}></code>#{rspace}"
-          end
-        end
-      end
-      textile.gsub!(/@/, TAG_AT) # all @ that do not demark code
+      inline_textile_link textile # avoid misinterpeation of invalid link-like sequences
+      inline_textile_code textile # offtagize inline code
       revert_hard_break textile
 
       # Preprocess non-interpreted sections for latter postprocessing
@@ -522,150 +133,31 @@ module TextileToMarkdown
       end
 
       ## Redmine-interpreted sequences
-
-      # protect wiki links
-      # escape following '(', which might be interpreted as MD link
-      textile.gsub!(/(!?\[\[[^\]\n\|]+(?:\|[^\]\n\|]+)?\]\])(( *\n? *)\()?/m) do |link|
-        wiki_link, parenthesis_after, parenthesis_indent = $1, $2, $3
-        if parenthesis_after.nil?
-          link = link.dup
-        else
-          link = "#{wiki_link}#{parenthesis_indent}\\(".dup
-        end
-        # protect pipe for table processing
-        link.gsub!('|', ph_for_char('|'))
-        "{{MDCONVERSION#{push_fragment(link)}}}"
-      end
-
-      # This would be an appropriate place to normalize lists to support Redmine flexible treatment.
-      # At this moment:
-      # - all list items at the beginning of the line
-      # - lists are terminated by a blank line
-      # Redmine catches the initial list level and unindents it. It also treats invalid nesting of
-      # ordered and unordered lists and inherits the oter type of list as sublist in the parent's
-      # current level. But in the end, the behavior might be quire weird.
-      # E.g.:
-      # ```
-      # * 1 List item (level 1)
-      # # 2 This produces an ordered sublist of 1 (level 2)
-      # * 3 And this produces an unordered sublist of 2 (level 3)
-      # ```
-      # pandoc does not interpret lines 2 and 3 as list items and it's probably OK :)
-      #
-      # redmine also allows mixing # and * in items of mixed lists , which is a common mistake
-      # -> let's address this.
-      textile.gsub!(/^(([*#])+) /) do |m|
-        # last character determines list type
-        listprefix = $2 * $1.length
-        # make placeholders first to ease offtag character escaping
-        "list#{make_placeholder(listprefix)} "
-      end
+      protect_wiki_links textile
+      normalize_lists_to_phs textile
 
       ## Textile sequences
-
       # Tables
-
-      # pandoc interprets | as table separator regardles of protecting it by code or notextile tags
-      escpipeph = ".Bany#{make_placeholder('&#124;')}Eany."
-      textile.gsub!(/^ *\|[^\n]*\| *$/) do |row|
-        # pandoc even decodes html entity, making it a cell separator
-        row.gsub!(/#{PIPE_HTMLENT_MATCH}/, escpipeph);
-        row.gsub!(/(?<stag><redpre (?<htag>#{OFFTAG_TAGS}\b) (?<preid>\d+\b)[^>\n]*>)(?<content>.*?)(?<etag><\/\k<htag>[^>\n]*>)/) do |offtext|
-          stag, content, etag = $~[:stag], $~[:content], $~[:etag]
-          have_escape = false
-          content.gsub!(/\|/) do
-            have_escape = true
-            escpipeph
-          end
-
-          # protect also ripped offtags
-          unless @pre_list.empty?
-            offtext.scan(/<redpre \w+ (\d+)>/) do
-              @pre_list[$1.to_i].gsub!(/\||#{PIPE_HTMLENT_MATCH}/) do
-                have_escape = true
-                escpipeph
-              end
-            end
-          end
-          if have_escape
-            "#{stag}#{content}#{etag}"
-          else
-            offtext
-          end
-        end
-        row
-      end
-
-      # Drop table colspan/rowspan notation ("|\2." or "|/2.") because pandoc does not support it
-      # See https://github.com/jgm/pandoc/issues/22
-      textile.gsub!(%r{\|[/\\]\d{1,2}\. }, '| ')
-
-      # Drop table alignement notation ("|>." or "|<." or "|=.") because pandoc does not support it
-      # See https://github.com/jgm/pandoc/issues/22
-      textile.gsub!(/\|[<>=]\. /, '| ')
-
-      # MD requires table header and Textile tables were often with plain cells in bold instead of it
-      textile.gsub!(/(?<=\A|\n$\n)^( *\|( *\*[^*|\n]+\* *\| *)+)(?=\Z|\n$\n|\n^ *\|)/m) do
-        heading = $1
-        heading.gsub!(/\| *\*([^*|\n]+)\*/) do
-          header = $1
-          "|_. #{header}"
-        end
-      end
-
-      # Make sure all tables have space in their cells
-      textile.gsub!(/^ *\|([^|\n]*\|)+ *$/) do |row|
-        row.gsub!(/\|([0-9~:_><=^\\\/]{1,4}\.)?(\s*)(([^|\n])+)/) do
-          mod, lspace, content = $1, $2, $3
-          lspace = ' ' if lspace.empty?
-          content.sub!(/(\S)$/, '\\1 ')
-          "|#{mod}#{lspace}#{content}"
-        end
-        row
-      end
+      protect_pipes_in_tables textile
+      drop_unsupported_table_features textile
+      guess_table_headers textile
+      pad_table_cells textile
 
       # make placeholderes from real qtags
       hard_break textile
-      inline_textile_span textile
+      inline_textile_span_to_phs textile
       revert_hard_break textile
 
       # protect qtag characters that pandoc tend to misinterpret
       # (has to be done after unindenting)
       protect_autolinks textile
-      textile.gsub!(/(?<!\|)[*_+-](?!\|)/) do |m|
-        out = m
-        flavour = case m
-          when '+', '-'
-            'escatstart'
-          when '_'
-            'escoutword'
-          else
-            out = "\\#{m}"
-            'any'
-          end
-       ".B#{flavour}#{make_placeholder(out)}E#{flavour}."
-      end
 
-      # parenthesis, brackets and equal signs in qtags get misinterpteted
-      textile.gsub!(/(?<=#{TAG_PH_END}Eqtag)[{(\[=]|[})\]=](?=Bqtag#{TAG_PH_BEGIN})/) do |m|
-        qtag_ph = ".Bany#{make_placeholder(m)}Eany."
-      end
+      protect_qtag_surroundings textile
+      restore_real_qtags textile
 
-      # restore real qtags for conversion
-      textile.gsub!(/Bqtag#{PH_RE}Eqtag/) do
-        get_placeholder($1)
-      end
-
-      ## restore construct that use qtag characters
-      # restore list prefixes
-      textile.gsub!(/list#{PH_RE}/) do
-        get_placeholder($1)
-      end
-
-      # restore horizontal rules
-      textile.gsub!(/Bhr#{PH_RE}Ehr/) do
-        get_placeholder($1)
-      end
+      ## restore constructs that use qtag characters
+      restore_textile_lists textile
+      restore_textile_hrs textile
 
       # pandoc does not interpret html entities directly following a word, help it
       textile.gsub!(/(?<=[\w\/])(&(?:#(?:[0-9]+|[Xx][0-9A-Fa-f]+)|[A-Za-z0-9]+);)/, "#{TAG_WORD_SEP_RIGHT}\\1");
@@ -684,6 +176,7 @@ module TextileToMarkdown
       end
 
       # Prefer inline code using backtics over code html tag (code is already protected as an offtag)
+      htmlcoder = HTMLEntities.new
       textile.gsub!(/<redpre code (\d+)>\s*<\/code>/) do |m|
         prei = $1.to_i
         code = @pre_list[prei].sub(/^<code\b([^>]*)>/, '')
@@ -693,7 +186,8 @@ module TextileToMarkdown
         code.strip!
         code = htmlcoder.decode(code)
 
-        if code.empty? or code.include? escpipeph or (codeparam != ' at' and code.include? "\n")
+        escpipem = @ph.match_context_match(TABLE_PIPE_MATCH_CONTEXT)
+        if code.empty? or code.match? escpipem or (codeparam != ' at' and code.include? "\n")
           # cannot convert to @
           m
         else
@@ -748,6 +242,18 @@ module TextileToMarkdown
       end
     end
 
+    QTAG_CHAR_RESTORE_RE = /
+      (?<pre>
+        (?<atstart>^[[:blank:]]*)
+        |(?<word1>\w)
+        |
+      )
+      (?<ph>#{Placeholders::UNICODE_1CHAR_PRIV_OPTBREAKS_MATCH})
+      (?<post>
+        (?<word2>\w)
+        |
+      )
+    /x
     def post_process_markdown(markdown)
       markdown.gsub!(TAG_LINE_BREAK_IN_QTAG, "  \n")
       markdown.gsub!(/^([[:blank:]]*)=#{TAG_BREAK_NOTEXTILE_2EQS}/, '\\1\\=')
@@ -764,6 +270,7 @@ module TextileToMarkdown
       # Remove the injected tag
       markdown.gsub!(' ' + TAG_FENCED_CODE_BLOCK, '')
 
+      ############ default restores go here
       # Restore protected sequences that do not differ in code blocks and regular MD
       markdown.gsub!(TAG_AT, '@')
       markdown.gsub!(TAG_HASH, '#')
@@ -774,20 +281,30 @@ module TextileToMarkdown
       markdown.gsub!(/Bword#{PH_RE}Eword/) do
         get_placeholder($1)
       end
-      markdown.gsub!(/(^[[:blank:]]*)?\.Bescatstart#{PH_RE}Eescatstart\./) do
-        esc = if $1.nil? then '' else '\\' end
-        "#{$1}#{esc}#{get_placeholder($2)}"
-      end
-      markdown.gsub!(/(?<=\w)\.Bescoutword#{PH_RE}Eescoutword\.(?=\w)/) do
-        get_placeholder($1)
-      end
-      markdown.gsub!(/\.Bescoutword#{PH_RE}Eescoutword\./) do
-        "\\#{get_placeholder($1)}"
+
+      markdown.gsub!(QTAG_CHAR_RESTORE_RE) do
+        pre = $~[:pre]
+        post = $~[:post]
+        atstart = $~[:atstart]
+        inword = $~[:word1] && $~[:word2]
+        ph = $~[:ph]
+        replaced = @ph.restore(ph) do |qtag|
+          esc = case qtag
+          when '+', '-'
+            '\\' if atstart
+          when '_'
+            '\\' unless inword
+          else
+            '\\'
+          end
+          "#{esc}#{qtag}"
+        end
+        "#{pre}#{replaced}#{post}"
       end
 
       # Replace sequence-interpretation placehodler back with nothing
       markdown.gsub!(/#{TAG_TO_EMPTY_RE}/, '')
- 
+
       # Replace <!-- end list --> injected by pandoc because Redmine incorrectly
       # does not supported HTML comments: http://www.redmine.org/issues/20497
       markdown.gsub!(/\n\n<!-- end list -->\n/, "\n\n&#29;\n")
@@ -835,6 +352,7 @@ module TextileToMarkdown
       # restore global tags that migh have caused issues if restored earlier
 
       # restore macro-like protected elements
+      # links
       markdown.gsub!(/\{\{MDCONVERSION(\w+)\}\}/) { pop_fragment $1 }
       # and the eventual placeholders in them
       markdown.gsub!(TAG_AT, '@')
@@ -854,8 +372,10 @@ module TextileToMarkdown
       markdown.gsub!(/#{TAG_NOTHING}/, '')
 
       # restore placeholders preserving text length
-      markdown.gsub!(UNICODE_1CHAR_PRIV_RE) {|ph| char_for_ph ph}
-
+      markdown.gsub!(Placeholders::UNICODE_1CHAR_PRIV_NOBREAKERS_RE) {|ph| @ph.restore(ph, :after_table_reformat)}
+      markdown.gsub!(/#{@ph.match_context_match(TABLE_PIPE_MATCH_CONTEXT, nil)}/) do
+        @ph.restore($1, TABLE_PIPE_MATCH_CONTEXT)
+      end
       expand_blockqutes markdown
 
       if markdown =~ /MDCONVERSION|#{TAG_PH_BEGIN}|#{TAG_PH_END}|pandocI|<redpre/
@@ -910,4 +430,5 @@ module TextileToMarkdown
       result
     end
   end
+
 end
