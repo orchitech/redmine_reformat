@@ -576,6 +576,8 @@ module TextileToMarkdown
           next "#{@ph.ph_for(nil, :none)}#{blk}" unless space
           # supported by pandoc, but not Redmine
           next "#{@ph.ph_for(nil, :none)}#{blk}" if ['bc'].include? tagpre
+          # drop attributes - probably should be done on more blocks
+          next "#{tag}.#{cite}#{space}#{content}" if ['h'].include? tagpre
 
           next blk unless tagpre == 'fn'
           # deal with footnotes
@@ -845,6 +847,8 @@ module TextileToMarkdown
             '\\' if atstart
           when '_'
             '\\' unless inword
+          when '%'
+            nil
           else
             '\\'
           end
