@@ -3,7 +3,8 @@
 ## Redmine allows for indenting a headline
 
   - list item
-  - item2  
-    h1. But this is continuation and not another indented headline
+  - item2
+
+# This would be also continuation but trying to fix common user mistakes
 
 Lorem ipsum.

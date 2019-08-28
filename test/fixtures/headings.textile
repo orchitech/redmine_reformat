@@ -5,6 +5,6 @@ h1. Normal heading
 * list item
 * item2
 
- h1. But this is continuation and not another indented headline
+ h1. This would be also continuation but trying to fix common user mistakes
 
 Lorem ipsum.

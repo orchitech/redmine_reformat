@@ -290,30 +290,43 @@ module TextileToMarkdown
           continuation = true
           res = "#{last_blank_line}#{line}"
           last_blank_line = ''
-          res
-        elsif continuation
-          if leading_space
-            # eat eventual preceding blank line
-            last_blank_line = ''
-            line
-          elsif rest.empty?
-            # blank line - waiting for next line
-            last_blank_line = "\n"
-            ''
-          elsif last_blank_line.empty?
-            # just continuing
-            line
-          else
-            # blank line was present and we are not indented - finally ending continuation
-            continuation = false
-            res = "#{last_blank_line}#{line}"
-            last_blank_line = ''
-            res
-          end
-        else
+          next res
+        end
+
+        # Not triggering continuation on textile prefix blocks, as it is mostly unintended by the authors
+        # I.e. supporting lists directly after headings :)
+        # But we still need to stop continuation after lists, even when the block is indented.
+        if continuation && !last_blank_line.empty? && line =~ SUPPORTED_PREFIX_BLOCK_START_RE
+          continuation = false
+          # fall-through
+        end
+
+        unless continuation
+          # unindent prefix blocks that Redmine 3.4.2 allows to be indented
+          line.sub!(/^[[:blank:]]+/, '') if line =~ SUPPORTED_PREFIX_BLOCK_START_RE
+          res = "#{last_blank_line}#{line}"
           last_blank_line = ''
-          # unindent heading (which is allowed by Redmine)
-          line.sub(/^[[:blank:]]+(h[1-6]\.[[:blank:]]+\S)/, '\\1')
+          next res
+        end
+
+        # Now process continuations
+        if leading_space
+          # eat eventual preceding blank line
+          last_blank_line = ''
+          line
+        elsif rest.empty?
+          # blank line - waiting for next line
+          last_blank_line = "\n"
+          ''
+        elsif last_blank_line.empty?
+          # just continuing
+          line
+        else
+          # blank line was present and we are not indented - finally ending continuation
+          continuation = false
+          res = "#{last_blank_line}#{line}"
+          last_blank_line = ''
+          res
         end
       end
       textile << last_blank_line
@@ -564,10 +577,10 @@ module TextileToMarkdown
       end
     end
 
+    SUPPORTED_PREFIX_BLOCK_START_RE = /^[[:blank:]]*(h[1-6]|fn\d*|bq|p)(#{A}#{C})\.(?::(\S+))?[[:blank:]]/
     BLOCKS_GROUP_RE = /\n{2,}(?! )/m
     PREFIX_BLOCK_RE = /^(([a-z]+)(\d*))(#{A}#{C})\.(?::(\S+))?( )?(.*)$/m
     def process_textile_prefix_blocks(text)
-      @defined_footnotes = []
       text.replace(text.split( BLOCKS_GROUP_RE ).collect do |blk|
         blk.strip!
         if blk =~ PREFIX_BLOCK_RE

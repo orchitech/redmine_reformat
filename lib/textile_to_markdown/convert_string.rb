@@ -69,6 +69,8 @@ module TextileToMarkdown
 
       # replace hard line breaks temporarily to support @multiline code@ and avoid "multi line":links
       hard_break textile
+      # TODO: We should eat image attributes here, as image attributes are now causing warnings about
+      # unreplaced placeholders when attributes are used.
       inline_textile_link textile # avoid misinterpeation of invalid link-like sequences
       inline_textile_code textile # offtagize inline code
       revert_hard_break textile

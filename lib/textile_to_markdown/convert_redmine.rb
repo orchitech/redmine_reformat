@@ -80,15 +80,16 @@ module TextileToMarkdown
     end
 
     def migrate_issue_description_journals
-      scope = JournalDetail.joins(:journal).where(
+      scope = JournalDetail.joins(:journal).joins('LEFT JOIN issues on issues.id=journals.journalized_id').where(
         property: 'attr', prop_key: 'description', journals: { journalized_type: 'Issue' }
       )
       STDERR.puts "JournalDetails (Issue.description): #{scope.count} records"
-      scope.pluck(:id, :value, :old_value).each do |id, value, old_value|
-        if value and md = convert(value)
+      scope.pluck(:id, :value, :old_value, :journal_id, 'issues.id').each do |id, value, old_value, journal_id, issue_id|
+        ref = "JournalDetails\##{id}: /issues/#{issue_id}\#change-#{journal_id}"
+        if value and md = convert(value, ref)
           value = md
         end
-        if old_value and md = convert(old_value)
+        if old_value and md = convert(old_value, ref)
           old_value = md
         end
         JournalDetail.where(id: id).update_all(
