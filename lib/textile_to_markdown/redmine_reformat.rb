@@ -577,9 +577,9 @@ module TextileToMarkdown
       end
     end
 
-    SUPPORTED_PREFIX_BLOCK_START_RE = /^[[:blank:]]*(h[1-6]|fn\d*|bq|p)(#{A}#{C})\.(?::(\S+))?[[:blank:]]/
+    SUPPORTED_PREFIX_BLOCK_START_RE = /\A[[:blank:]]*(h[1-6]|fn\d*|bq|p)(#{A}#{C})\.(?::(\S+))?[[:blank:]]/
     BLOCKS_GROUP_RE = /\n{2,}(?! )/m
-    PREFIX_BLOCK_RE = /^(([a-z]+)(\d*))(#{A}#{C})\.(?::(\S+))?( )?(.*)$/m
+    PREFIX_BLOCK_RE = /\A(([a-z]+)(\d*))(#{A}#{C})\.(?::(\S+))?( )?(.*)$/m
     def process_textile_prefix_blocks(text)
       text.replace(text.split( BLOCKS_GROUP_RE ).collect do |blk|
         blk.strip!

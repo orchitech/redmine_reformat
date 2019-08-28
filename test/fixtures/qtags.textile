@@ -2,7 +2,7 @@ h1. Qtags - bold, italic, underlined and similar inline formatting
 
 h2. Special pandoc behavior
 
-Parentheses and prackets within qtags should be interpreted as normal text: *(hello)* *[hello]* *{hello}*
+Parentheses and brackets within qtags should be interpreted as normal text: *(hello)* *[hello]* *{hello}*
 
 Pandoc is fragile about dashes in strikeout text: -this should - be (?) striked-out-
 

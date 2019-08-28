@@ -5,6 +5,26 @@ h1. Normal heading
 * list item
 * item2
 
- h1. This would be also continuation but trying to fix common user mistakes
+ h1. This would be also continuation but probably wasn't meant to be.
 
 Lorem ipsum.
+
+h1. Make sure textile prefix blocks are not misdetected
+
+h2. Allow lists directly after prefix textile block
+* Users suffer with this in Redmine
+* Help them though the converted edit history might be tricky
+
+h2. Allow code directly after prefix textile block
+<pre>
+Let's allow this contrary to Redmine.
+</pre>
+
+<pre>
+But prefix blocks directly after should be supressed
+</pre>
+h2. This is not a heading
+
+* A list
+* also supresses matching a textile prefix block directly after it
+h2. This is not a heading
