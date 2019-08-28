@@ -116,7 +116,6 @@ module TextileToMarkdown
           end
         end
         finished += 1
-        raise "test end" if finished >= 10000
         if finished % BATCHSIZE == 0 || finished == all
           STDERR.puts "Wiki versions: finished #{finished} of #{all}"
         end

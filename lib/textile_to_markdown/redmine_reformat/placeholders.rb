@@ -34,6 +34,7 @@ module TextileToMarkdown
       # before text-length sensitive processing.
       # See https://github.com/jgm/pandoc/blob/master/src/Text/Pandoc/Readers/Textile.hs#L500
       def prepare_text(text)
+        # TODO: we should also smartly deal with all corresponding entities
         text.gsub!(/[«»]/) do |m|
           ph_for(m, :both, :init)
         end

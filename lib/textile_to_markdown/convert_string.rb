@@ -98,7 +98,6 @@ module TextileToMarkdown
       # has to be done after unindenting and protecting qtag chars in all semantic contexts
       protect_autolinks textile
       protect_qtag_chars textile
-      protect_qtag_surroundings textile
 
       # finished with qtag caracters
       restore_real_qtags textile

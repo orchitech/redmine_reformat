@@ -416,9 +416,7 @@ module TextileToMarkdown
           end
           # Redmine does not recognize bracketed version while Pandoc does
           pre.sub!(/\[$/, '&#91;') if pre
-          # URL encoding still looks better than backslash escaping in the URL
-          url.gsub!('[', '%5B')
-          url.gsub!(']', '%5D')
+          url.gsub!(']') {|b| @ph.ph_for(b, :none)}
           "#{pre}[\"#{fulltext}\":#{url}#{slash}]#{post}"
         else
           "#{ppre}&quot;#{ptext}\":#{purl}#{ppost}"
@@ -626,34 +624,27 @@ module TextileToMarkdown
           # outplace leading and trailing line breaks, which Redmine supports
           content.sub!(/^((?:<br \/>)+)/) {|brl| oqs << brl; ''}
           content.sub!(/((?:<br \/>)+)$/) {|brr| oqa = "#{brr}#{oqa}"; ''}
-          if content =~ /\S/
-            content.gsub!(/<br \/>/, TAG_LINE_BREAK_IN_QTAG)
-            qtag_mcph1 = @ph.ph_for(newqtag, :none, :qtag, REAL_QTAG_RESTORE_MATCH_CONTEXT)
-            qtag_mcph2 = @ph.ph_for(newqtag, :none, :qtag, REAL_QTAG_RESTORE_MATCH_CONTEXT)
-            "#{sta}#{oqs}#{qtag_mcph1}#{content}#{qtag_mcph2}#{oqa}"
-          else
-            "#{sta}#{oqs}#{oqa}"
-          end
+          # eat the qtag including contents is nothing left
+          next "#{sta}#{oqs}#{oqa}" unless content =~ /\S/
+
+          content.gsub!(/<br \/>/, TAG_LINE_BREAK_IN_QTAG)
+          # supress qtag atts where Redmine does not use them
+          atts = content.match(/^(#{C})(.+)$/) {$1 unless $1.empty?}
+          noatts = @ph.ph_for(nil, :both) unless atts
+          qtag_mcph1 = @ph.ph_for("#{newqtag}#{noatts}", :none, :qtag, REAL_QTAG_RESTORE_MATCH_CONTEXT)
+          qtag_mcph2 = @ph.ph_for(newqtag, :none, :qtag, REAL_QTAG_RESTORE_MATCH_CONTEXT)
+          "#{sta}#{oqs}#{qtag_mcph1}#{content}#{qtag_mcph2}#{oqa}"
         end
       end
     end
 
     def protect_qtag_chars(text)
-      # FIXME: Add more qtags acording to issue sheet
-      text.gsub!(/(?<!\|)[*_+-](?!\|)/) do |m|
+      text.gsub!(/(?<!\|)[#{PUNCT_Q}](?!\|)/) do |m|
         @ph.ph_for(m, :both, :qtag)
       end
-    end
-
-    # parenthesis, brackets and equal signs in qtags get misinterpteted around qtags
-    # expect: placeholderized real qtags
-    def protect_qtag_surroundings(text)
-      qrmatch = @ph.match_context_match(REAL_QTAG_RESTORE_MATCH_CONTEXT)
-      text.gsub!(/([})\]=])?(#{qrmatch})([{(\[=])?/) do
-        op, qrph, clo = $~[1..3]
-        op = @ph.ph_for(op, :both) if op
-        clo = @ph.ph_for(clo, :both) if clo
-        "#{op}#{qrph}#{clo}"
+      text.gsub!(/\?{2,}/) do |qms|
+        # insert nil placeholders in between each char
+        qms.gsub(/(?<=.)(?!$)/) {@ph.ph_for(nil, :none)}
       end
     end
 
@@ -718,7 +709,7 @@ module TextileToMarkdown
           # and URLs prefixed with ! !> !< != (textile images)
           all
         else
-          urlesc = url.gsub(/[#&_!\[\]\\-]/) {|m| @ph.ph_for(m, :none, :aftercode)}
+          urlesc = url.gsub(/[#&_!\[\]\\~-]/) {|m| @ph.ph_for(m, :none, :aftercode)}
           postesc = post.sub(/>/) {|m| @ph.ph_for(htmlcoder.encode(m), :both)}
           "#{leading}#{proto}#{urlesc}#{postesc}"
         end
