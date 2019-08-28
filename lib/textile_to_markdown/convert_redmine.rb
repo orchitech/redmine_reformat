@@ -1,7 +1,12 @@
 require 'textile_to_markdown/convert_string'
+require 'parallel'
 
 module TextileToMarkdown
   class ConvertRedmine
+
+    # Experimental parallel processing - set to a number > 1 to check it out.
+    # Please note that transaction won't work when parallel processing is on.
+    PARALLEL = 12
 
     ITEMS_TO_MIGRATE = {
       Comment => :comments,
@@ -35,7 +40,7 @@ module TextileToMarkdown
     end
 
     def call
-      Project.transaction do
+      decide_transaction do
         Mailer.with_deliveries(false) do
           migrate_settings
           migrate_objects
@@ -48,6 +53,15 @@ module TextileToMarkdown
     end
 
     private
+
+    def decide_transaction(&block)
+      if PARALLEL > 1
+        # no transaction
+        block.call
+      else
+        Project.transaction(&block)
+      end
+    end
 
     def migrate_settings
       STDERR.puts "Settings"
@@ -84,7 +98,8 @@ module TextileToMarkdown
         property: 'attr', prop_key: 'description', journals: { journalized_type: 'Issue' }
       )
       STDERR.puts "JournalDetails (Issue.description): #{scope.count} records"
-      scope.pluck(:id, :value, :old_value, :journal_id, 'issues.id').each do |id, value, old_value, journal_id, issue_id|
+      rows = scope.pluck(:id, :value, :old_value, :journal_id, 'issues.id')
+      process(rows) do |id, value, old_value, journal_id, issue_id|
         ref = "JournalDetails\##{id}: /issues/#{issue_id}\#change-#{journal_id}"
         if value and md = convert(value, ref)
           value = md
@@ -102,7 +117,8 @@ module TextileToMarkdown
       all = WikiContent::Version.count
       STDERR.puts "Wiki versions: converting #{all} historic content revisions"
       finished = 0
-      WikiContent::Version.includes(:page => { :wiki => :project }).find_each do |version|
+      r = WikiContent::Version.includes(:page => { :wiki => :project }).find_each
+      process(r) do |version|
         ref = "WikiContent::Version\##{version.id}: "\
           "/projects/#{version.project.identifier}"\
           "/wiki/#{version.page.title}/#{version.version}"
@@ -170,15 +186,23 @@ module TextileToMarkdown
         row_count = rows.size
         offset = rows.last[0]
 
-        rows.each{|r| yield r}
+        process(rows) {|r| yield r}
         finished += row_count
         STDERR.puts "#{scope.table_name}: finished #{finished} of #{notnull}"
+        raise "test end" if finished > 3000
 
         break if row_count < BATCHSIZE
         rows = scope.where("id > ?", offset).pluck(:id, attribute)
       end
     end
 
+    def process(rows, &block)
+      if PARALLEL > 1
+        Parallel.each(rows, in_threads: PARALLEL, &block)
+      else
+        rows.each &block
+      end
+    end
 
     def convert(textile, reference = nil)
       md = textile
