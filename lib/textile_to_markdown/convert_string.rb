@@ -87,6 +87,8 @@ module TextileToMarkdown
       guess_table_headers textile
       pad_table_cells textile
 
+      process_textile_prefix_blocks textile
+
       # make placeholderes from real qtags
       hard_break textile
       inline_textile_span_to_phs textile
@@ -115,6 +117,8 @@ module TextileToMarkdown
       # Without this fix, a list of items containing <pre> would not be interpreted as a list at all.
       put_blank_line_before_pre_in_list textile
 
+      textile_footnote_refs textile
+
       # Avoid converting some symbols into special characters
       protect_symbols textile
 
@@ -137,9 +141,10 @@ module TextileToMarkdown
       #markdown.gsub!(/\.(?<ph>B(?<flavour>any|escatstart|escoutword)#{PH_RE}E\k<flavour>)(?<mis2>[)])\./) do
       #  ".#{$~[:ph]}.#{$~[:mis2]}"
       #end
-      md_remove_auxiliary_code_block_lang markdown
       restore_context_free_placeholders markdown
       restore_qtag_chars_to_md markdown
+      md_footnotes markdown
+      md_remove_auxiliary_code_block_lang markdown
       # see http://www.redmine.org/issues/20497
       md_separate_lists_redmine_friendly markdown
       # Restore/unescaping sequences that are protected differently in code blocks

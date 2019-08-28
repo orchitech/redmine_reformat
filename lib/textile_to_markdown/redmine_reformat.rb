@@ -46,6 +46,7 @@ module TextileToMarkdown
     REAL_QTAG_RESTORE_MATCH_CONTEXT = 'qtag<random><ph>'
     MACRO_MATCH_CONTEXT = '{{MdConversionMacro<random><ph>}}'
     FENCED_CODE_BLOCK_MATCH_CONTEXT = '{{MdConversionFencedCode<random><ph>}}'
+    FOOTNOTE_MATCH_CONTEXT = '<random>fn<ph>follows'
 
     # Special matches
     PIPE_HTMLENT_MATCH = '&vert;|&#124;|&#[xX]7[cC];'
@@ -55,6 +56,8 @@ module TextileToMarkdown
       @ph = Placeholders.new(text, reference)
       @ph.prepare_text(text)
       @pre_list = []
+      @defined_footnotes = []
+      @referenced_footnotes = []
     end
 
     def finalize_reformatter(text)
@@ -563,6 +566,29 @@ module TextileToMarkdown
       end
     end
 
+    BLOCKS_GROUP_RE = /\n{2,}(?! )/m
+    PREFIX_BLOCK_RE = /^(([a-z]+)(\d*))(#{A}#{C})\.(?::(\S+))?( )?(.*)$/m
+    def process_textile_prefix_blocks(text)
+      @defined_footnotes = []
+      text.replace(text.split( BLOCKS_GROUP_RE ).collect do |blk|
+        blk.strip!
+        if blk =~ PREFIX_BLOCK_RE
+          tag,tagpre,num,atts,cite,space,content = $~[1..7]
+          # pandoc does not require space at least after p.
+          next "#{@ph.ph_for(nil, :none)}#{blk}" unless space
+          # supported by pandoc, but not Redmine
+          next "#{@ph.ph_for(nil, :none)}#{blk}" if ['bc'].include? tagpre
+
+          next blk unless tagpre == 'fn'
+          # deal with footnotes
+          newtag = @ph.add_match_context(num, FOOTNOTE_MATCH_CONTEXT)
+          @defined_footnotes << num
+          blk.replace("#{newtag} #{content}")
+        end
+        blk
+      end.join("\n\n"))
+    end
+
     QTAGS = [
       ['**', '*'],
       ['*'],
@@ -635,6 +661,18 @@ module TextileToMarkdown
     def restore_real_qtags(text)
       text.gsub!(/#{@ph.match_context_match(REAL_QTAG_RESTORE_MATCH_CONTEXT, true)}/) do
         @ph.restore($1, :qtag)
+      end
+    end
+
+    def textile_footnote_refs(text)
+      text.gsub!(/\b\[([0-9]+?)\](\s)?/) do |m|
+        num, after = $~[1..2]
+        @referenced_footnotes << num
+        if @defined_footnotes.include? num
+          "#{@ph.ph_for_each('[^', :none)}#{num}#{@ph.ph_for(']', :right)}#{after}"
+        else
+          m
+        end
       end
     end
 
@@ -822,6 +860,17 @@ module TextileToMarkdown
           "#{esc}#{qtag}"
         end
         "#{pre}#{replaced}#{post}"
+      end
+    end
+
+    def md_footnotes(text)
+      text.gsub!(/#{@ph.match_context_match(FOOTNOTE_MATCH_CONTEXT, true)}/) do
+        num = $1
+        if @referenced_footnotes.include? num
+          "[^#{num}]:"
+        else
+          "\\[#{num}\\]"
+        end
       end
     end
 

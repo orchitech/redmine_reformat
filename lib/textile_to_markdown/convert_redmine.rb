@@ -101,18 +101,22 @@ module TextileToMarkdown
       all = WikiContent::Version.count
       STDERR.puts "Wiki versions: converting #{all} historic content revisions"
       finished = 0
-      WikiContent::Version.find_each do |version|
+      WikiContent::Version.includes(:page => { :wiki => :project }).find_each do |version|
+        ref = "WikiContent::Version\##{version.id}: "\
+          "/projects/#{version.project.identifier}"\
+          "/wiki/#{version.page.title}/#{version.version}"
         if textile = version.text
-          if md = convert(textile, "WikiContent::Version\##{version.id}")
+          if md = convert(textile, ref)
             if version.compression == 'gzip'
               md = Zlib::Deflate.deflate(md, Zlib::BEST_COMPRESSION)
             end
             version.update_column :data, md
           else
-            STDERR.puts "failed to convert wiki version #{version.id}"
+            STDERR.puts "failed to convert #{ref}"
           end
         end
         finished += 1
+        raise "test end" if finished >= 10000
         if finished % BATCHSIZE == 0 || finished == all
           STDERR.puts "Wiki versions: finished #{finished} of #{all}"
         end
