@@ -189,7 +189,6 @@ module TextileToMarkdown
         process(rows) {|r| yield r}
         finished += row_count
         STDERR.puts "#{scope.table_name}: finished #{finished} of #{notnull}"
-        raise "test end" if finished > 3000
 
         break if row_count < BATCHSIZE
         rows = scope.where("id > ?", offset).pluck(:id, attribute)
