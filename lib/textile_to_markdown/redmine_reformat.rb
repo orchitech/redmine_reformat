@@ -237,11 +237,11 @@ module TextileToMarkdown
 
     ALLOWED_TAGS = %w[redpre pre code kbd notextile].freeze
     def escape_html_tags(text)
-      text.gsub!(%r{<(\/?([!\w]+)[^<>\n]*)(>)?}) do |_m|
-        if ALLOWED_TAGS.include?($2) && !$3.nil?
+      text.gsub!(%r{<(\/?([!\w]+)[^<>\n]*)(>)?}) do |m|
+        if ALLOWED_TAGS.include?($2) && $3
           "<#{$1}#{$3}"
         else
-          "&lt;#{$1}#{'>' if $3 =~ /[^[:space:]]/}"
+          "&lt;#{$1}#{'&gt;' unless $3.nil?}"
         end
       end
     end
@@ -614,12 +614,12 @@ module TextileToMarkdown
     end
 
     QTAGS = [
-      ['**', '*'],
-      ['*'],
-      ['??', '_'],
+      ['**', nil],
+      ['*', nil],
+      ['??', 'cite'],
       ['-', nil],
-      ['__', '_'],
-      ['_', '_'],
+      ['__', nil],
+      ['_', nil],
       ['%', nil],
       ['+', nil],
       ['^', nil],
@@ -627,9 +627,8 @@ module TextileToMarkdown
     ]
     QTAGS_JOIN = QTAGS.map {|rc, ht| Regexp::quote rc}.join('|')
 
-    QTAGS.collect! do |rc, newrc|
+    QTAGS.collect! do |rc, ht|
       rcq = Regexp::quote rc
-      newrc = rc if newrc.nil?
       re =
           /(^|[>\s\(])          # sta
           (?!\-\-)
@@ -640,11 +639,11 @@ module TextileToMarkdown
           #{rcq}
           (#{QTAGS_JOIN}|#{Placeholders.match_context_static_match(REAL_QTAG_RESTORE_MATCH_CONTEXT)}|)      # oqa
           (?=[[:punct:]]|<|\s|\)|$)/x
-      [rc, newrc, re]
+      [rc, ht, re]
     end
 
     def inline_textile_span_to_phs(text)
-      QTAGS.each do |qtag_rc, newqtag, qtag_re|
+      QTAGS.each do |qtag_rc, ht, qtag_re|
         text.gsub!(qtag_re) do |m|
           sta,oqs,qtag,content,oqa = $~[1..6]
           # outplace leading and trailing line breaks, which Redmine supports
@@ -654,12 +653,18 @@ module TextileToMarkdown
           next "#{sta}#{oqs}#{oqa}" unless content =~ /\S/
 
           content.gsub!(/<br \/>/, TAG_LINE_BREAK_IN_QTAG)
-          # supress qtag atts where Redmine does not use them
-          atts = content.match(/^(#{C})(.+)$/) {$1 unless $1.empty?}
-          noatts = @ph.ph_for(nil, :both) unless atts
-          qtag_mcph1 = @ph.ph_for("#{newqtag}#{noatts}", :none, :qtag, REAL_QTAG_RESTORE_MATCH_CONTEXT)
-          qtag_mcph2 = @ph.ph_for(newqtag, :none, :qtag, REAL_QTAG_RESTORE_MATCH_CONTEXT)
-          "#{sta}#{oqs}#{qtag_mcph1}#{content}#{qtag_mcph2}#{oqa}"
+          newqts = newqte = nil
+          if ht.nil?
+            # supress qtag atts where Redmine does not use them
+            atts = content.match(/^(#{C})(.+)$/) {$1 unless $1.empty?}
+            noatts = @ph.ph_for(nil, :both) unless atts
+            newqts = @ph.ph_for("#{qtag_rc}#{noatts}", :none, :qtag, REAL_QTAG_RESTORE_MATCH_CONTEXT)
+            newqte = @ph.ph_for(qtag_rc, :none, :qtag, REAL_QTAG_RESTORE_MATCH_CONTEXT)
+          else
+            newqts = "<#{ht}>"
+            newqte = "</#{ht}>"
+          end
+          "#{sta}#{oqs}#{newqts}#{content}#{newqte}#{oqa}"
         end
       end
     end
@@ -736,7 +741,9 @@ module TextileToMarkdown
           all
         else
           urlesc = url.gsub(/[#&_!\[\]\\~*^-]/) {|m| @ph.ph_for(m, :none, :aftercode)}
-          postesc = post.sub(/>/) {|m| @ph.ph_for(htmlcoder.encode(m), :both)}
+          postesc = post
+          postesc.sub!(/^&gt;/) {|m| @ph.ph_for(m, :both)}
+          postesc.sub!(/^>/) {|m| @ph.ph_for(htmlcoder.encode(m), :both)}
           "#{leading}#{proto}#{urlesc}#{postesc}"
         end
       end

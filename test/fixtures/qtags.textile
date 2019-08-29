@@ -1,5 +1,11 @@
 h1. Qtags - bold, italic, underlined and similar inline formatting
 
+_Italic_
+__Also italic__
+*Bold*
+**Also bold**
+??Cite is HTML only??
+
 h2. Special pandoc behavior
 
 Parentheses and brackets within qtags should be interpreted as normal text: *(hello)* *[hello]* *{hello}*
@@ -9,9 +15,7 @@ Pandoc is fragile about dashes in strikeout text: -this should - be (?) striked-
 h2. Special Redmine behavior
 
 +Underlined text+
-_Italic_
-*Bold*
- *[[WikiLink]]*
+*[[WikiLink]]*
 
 Redmine supports _multiline
 qtags_ and even allows to _
@@ -20,7 +24,7 @@ start with a newline_
 h2. Prevent escaping in-word underscores
 
 My username is joe_average or joe__average or _joe or whatever.
-Friends call me joe_ or whatever.
+Friends call me joe_ or whatever. My name is  actually: <first>_<middle>_<last>
 
 h2. Ensuring interpreting in tables
 

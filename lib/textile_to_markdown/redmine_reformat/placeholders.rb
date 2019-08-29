@@ -98,10 +98,12 @@ module TextileToMarkdown
         phs = @match_context_phs[contextstr]
         max = phs.length
         phmatch = if phs.empty?
+          # avoid matching anything
           max = 1
-          '[^\s\S]' # avoid matching anything
+          '[^\s\S]'
         else
-          phs.uniq.map{|s| Regexp::quote(s)}.join('|')
+          # ensure longest match
+          phs.uniq.sort_by(&:length).reverse.map{|s| Regexp::quote(s)}.join('|')
         end
         self.class.build_match_context_match(contextstr, phmatch, 1, max, capture)
       end
