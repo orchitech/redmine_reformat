@@ -14,3 +14,5 @@ Allow urls to end with hash, dash and underscore
 https://orchi.tech/x# https://orchi.tech/x- https://orchi.tech/_
 
 This also works <https://example.org/example> by Joe <whodidthis@example.org>.
+
+Should not be link ","path":"/no/link", neither this {"grant_type":"client"}

@@ -67,27 +67,26 @@ module TextileToMarkdown
       # extrect indented code and unindent lists
       process_indented_blocks textile
 
-      # replace hard line breaks temporarily to support @multiline code@ and avoid "multi line":links
+      # block should be processed here before inlines, but delaying some of them,
+      # as their syntax collides with some tricky inline sequences
       hard_break textile
       # TODO: We should eat image attributes here, as image attributes are now causing warnings about
       # unreplaced placeholders when attributes are used.
       inline_textile_link textile # avoid misinterpeation of invalid link-like sequences
       inline_textile_code textile # offtagize inline code
+      block_textile_table textile
       revert_hard_break textile
 
       # all non-interpreted sections are offtagized now
       protect_offtag_contents
 
-      ## Redmine-interpreted sequences
+      ## make inline vs. block sequence normalizing easier
       protect_wiki_links textile
       normalize_lists_to_phs textile
 
-      ## Textile sequences
-      # Tables
+      # tables vs. inline sequences in them
       protect_pipes_in_tables textile
-      drop_unsupported_table_features textile
       guess_table_headers textile
-      pad_table_cells textile
 
       process_textile_prefix_blocks textile
 

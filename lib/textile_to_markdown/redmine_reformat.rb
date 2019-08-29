@@ -338,7 +338,7 @@ module TextileToMarkdown
     # Update: redmine made its Textile interpreting stricter between 3.4.2 and 3.4.11 and
     # space-indented multi-level lists do not work anymore. This code solves it as a side effect :)
     def process_indented_blocks(text)
-      text.gsub!(/(\A\n?|\n\n)^((?: (?!<redpre))+)((?:.(?!<redpre))+?)(?=\n?\Z|\n\n)/m) do |block|
+      text.gsub!(/(\A\n?|\n\n)^((?: (?!<redpre))+)(.+?)(?=\n?\Z|\n\n)/m) do |block|
         prefix = $1
         strip_spaces = $2.length
         postfix = $4
@@ -348,7 +348,7 @@ module TextileToMarkdown
           list = true if line =~ /^[*#]+ /
           line
         end.join("\n")
-        if list
+        if list || code_block.match?(/<redpre\b/)
           "#{prefix}\n#{code_block}#{postfix}"
         elsif prefix == "\n\n"
           # indented code must not be at the beginning of file
@@ -430,9 +430,11 @@ module TextileToMarkdown
           # Redmine does not recognize bracketed version while Pandoc does
           pre.sub!(/\[$/, '&#91;') if pre
           url.gsub!(']') {|b| @ph.ph_for(b, :none)}
+          inline_textile_span_to_phs fulltext
+          protect_qtag_chars fulltext
           "#{pre}[\"#{fulltext}\":#{url}#{slash}]#{post}"
         else
-          "#{ppre}&quot;#{ptext}\":#{purl}#{ppost}"
+          m.gsub('"', '&quot;')
         end
       end
     end
@@ -508,6 +510,40 @@ module TextileToMarkdown
         @ph.ph_for_each(listprefix, :none, :qtag, TEXTILE_LIST_MATCH_CONTEXT)
       end
     end
+    # TODO: table processings should be merged to one method...
+    TABLE_RE = /\n{0,2}^(?:table(_?#{S}#{A}#{C})\. ?\n)?^(#{A}#{C}\.? ?\|.*?\|)(\n\n|\n?\Z)/m
+
+    # Reformat a Textile table block when hard breaks are encoded to <br />
+    # - we need space-padded cells
+    # - we need blank line before table
+    # - we should drop unsupported table features like
+    #     - https://github.com/jgm/pandoc/issues/22 - colspan/rowspan notation ("|\2." or "|/2.")
+    #     - https://github.com/jgm/pandoc/issues/22 - alignement notation ("|>." or "|<." or "|=.")
+    def block_textile_table(text)
+      text.replace(text.split(BLOCKS_GROUP_RE).collect do |blk|
+        blk.strip!
+        blk.gsub(TABLE_RE) do |matches|
+          tatts, fullrow, after = $~[1..3]
+          rows = []
+          fullrow.gsub!(/([^|\s])\s*\n/, "\\1<br />")
+          fullrow.each_line do |row|
+            ratts, row = pba( $1, 'tr' ), $2 if row =~ /^(#{A}#{C}\. )(.*)/m
+            cells = []
+            # the regexp prevents wiki links with a | from being cut as cells
+            row.scan(/\|(_?#{S}#{A}#{C}\. ?)?((\[\[[^|\]]*\|[^|\]]*\]\]|[^|])*?)(?=\|)/) do |modifiers, cell|
+              ctyp = ''
+              ctyp = '_.' if modifiers && modifiers =~ /^_/
+              # ensure cells are space-padded
+              cell.gsub!(/^ *(.*?) *$/, ' \\1 ')
+              cells << "#{ctyp}#{cell}"
+            end
+            rows << "|#{cells.join('|')}|"
+          end
+          # make sure we have new line before table - pandoc does not detect it otherwise
+          "\n\n#{rows.join("\n")}#{after}"
+        end
+      end.join("\n\n"))
+    end
 
     # pandoc interprets | as table separator regardless of protecting it by code or notextile tags
     def protect_pipes_in_tables(text)
@@ -541,18 +577,6 @@ module TextileToMarkdown
       end
     end
 
-    def drop_unsupported_table_features(text)
-      text.gsub!(/^ *\|[^\n]*\| *$/) do |row|
-        # Drop table colspan/rowspan notation ("|\2." or "|/2.") because pandoc does not support it
-        # See https://github.com/jgm/pandoc/issues/22
-        row.gsub!(%r{\|[/\\]\d{1,2}\. }, '| ')
-        # Drop table alignement notation ("|>." or "|<." or "|=.") because pandoc does not support it
-        # See https://github.com/jgm/pandoc/issues/22
-        row.gsub!(/\|[<>=]\. /, '| ')
-        row
-      end
-    end
-
     # MD requires table header and Textile tables were often with plain cells in bold instead of it
     def guess_table_headers(text)
       text.gsub!(/(?<=\A|\n$\n)^( *\|( *\*[^*|\n]+\* *\| *)+)(?=\Z|\n$\n|\n^ *\|)/m) do
@@ -561,19 +585,6 @@ module TextileToMarkdown
           header = $1
           "|_. #{header}"
         end
-      end
-    end
-
-    # Make sure all tables have space in their cells
-    def pad_table_cells(text)
-      text.gsub!(/^ *\|([^|\n]*\|)+ *$/) do |row|
-        row.gsub!(/\|([0-9~:_><=^\\\/]{1,4}\.)?(\s*)(([^|\n])+)/) do
-          mod, lspace, content = $1, $2, $3
-          lspace = ' ' if lspace.empty?
-          content.sub!(/(\S)$/, '\\1 ')
-          "|#{mod}#{lspace}#{content}"
-        end
-        row
       end
     end
 
@@ -639,7 +650,7 @@ module TextileToMarkdown
           # outplace leading and trailing line breaks, which Redmine supports
           content.sub!(/^((?:<br \/>)+)/) {|brl| oqs << brl; ''}
           content.sub!(/((?:<br \/>)+)$/) {|brr| oqa = "#{brr}#{oqa}"; ''}
-          # eat the qtag including contents is nothing left
+          # eat the qtag including contents if nothing left
           next "#{sta}#{oqs}#{oqa}" unless content =~ /\S/
 
           content.gsub!(/<br \/>/, TAG_LINE_BREAK_IN_QTAG)
@@ -724,7 +735,7 @@ module TextileToMarkdown
           # and URLs prefixed with ! !> !< != (textile images)
           all
         else
-          urlesc = url.gsub(/[#&_!\[\]\\~-]/) {|m| @ph.ph_for(m, :none, :aftercode)}
+          urlesc = url.gsub(/[#&_!\[\]\\~*^-]/) {|m| @ph.ph_for(m, :none, :aftercode)}
           postesc = post.sub(/>/) {|m| @ph.ph_for(htmlcoder.encode(m), :both)}
           "#{leading}#{proto}#{urlesc}#{postesc}"
         end
@@ -732,7 +743,7 @@ module TextileToMarkdown
     end
 
     def put_breaks_before_html_entities(text)
-      text.gsub!(/(?<=[\w\/])(&(?:#(?:[0-9]+|[Xx][0-9A-Fa-f]+)|[A-Za-z0-9]+);)/) do
+      text.gsub!(/(?<=[^#{PANDOC_WORD_BOUNDARIES}])(&(?:#(?:[0-9]+|[Xx][0-9A-Fa-f]+)|[A-Za-z0-9]+);)/) do
         start = $1
         "#{@ph.ph_for(nil, :right)}#{start}"
       end

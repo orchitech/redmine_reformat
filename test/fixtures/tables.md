@@ -34,3 +34,25 @@ Paragraph Lorem ipsum
 | a1        | a2                        |
 | --------- | ------------------------- |
 | [[Pg|As]] | [[Page#Anchor|AlsoAlias]] |
+
+# Table delimiting
+
+## Table after text
+
+This is allowed by Redmine
+
+| h1 |
+| -- |
+| c1 |
+
+## Text after table - not a table
+
+|\_. h1 |  
+| c1 |  
+Avoid table
+
+## Separate table from prefix blocks unlike Redmine
+
+| h1 |
+| -- |
+| c1 |

@@ -30,3 +30,21 @@ h1. Wiki links with pipes are especially tricky
 
 |_. a1   |_. a2 |
 | [[Pg|As]] | [[Page#Anchor|AlsoAlias]] |
+
+h1. Table delimiting
+
+h2. Table after text
+
+This is allowed by Redmine
+|_. h1 |
+| c1 |
+
+h2. Text after table - not a table
+
+|_. h1 |
+| c1 |
+Avoid table
+
+h2. Separate table from prefix blocks unlike Redmine
+|_. h1 |
+| c1 |
