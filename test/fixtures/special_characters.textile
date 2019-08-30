@@ -6,8 +6,9 @@ Even in @code ! \! \\! \!!@
 
 h1. Hash
 
-An issue number #123
+Issue number #123, #2; and #3. LOL:#5
 #123 is a good issue.
+&amp;#13; is a xml entity.
 
 # 123 is not an issue.
 

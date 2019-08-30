@@ -757,7 +757,7 @@ module TextileToMarkdown
     end
 
     def protect_hashes textile
-      textile.gsub!(/(?<!&)#(?=\w)|(?<=[^\W&])#/) do |m|
+      textile.gsub!(/(?<![&;])#(?=\w)|(?<=[^\W&;])#/) do |m|
         @ph.ph_for(m, :none)
       end
     end

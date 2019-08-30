@@ -6,8 +6,9 @@ Even in `code ! \! \\! \!!`
 
 # Hash
 
-An issue number #123  
-#123 is a good issue.
+Issue number #123, #2; and #3. LOL:#5  
+#123 is a good issue.  
+&\#13; is a xml entity.
 
 1.  123 is not an issue.
 
