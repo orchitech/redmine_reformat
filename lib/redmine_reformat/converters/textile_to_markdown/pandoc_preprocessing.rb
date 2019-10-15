@@ -4,12 +4,12 @@
 # Written by Martin Cizek, Orchitech Solutions
 # Contains portions of Redmine and Redcloth3 code
 
-require 'textile_to_markdown/redmine_reformat/placeholders'
+require 'redmine_reformat/converters/placeholders'
 require 'textile_to_markdown/markdown-table-formatter/table-formatter'
 require 'htmlentities'
 
-module TextileToMarkdown
-  module RedmineReformat
+module RedmineReformat::Converters::TextileToMarkdown
+  module PandocPreprocessing
 
     # treat '==' as <notextile> ?
     CONF_NOTEXTILE_2EQS = false

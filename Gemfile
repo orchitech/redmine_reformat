@@ -1,1 +1,1 @@
-gem 'parallel'
+gem 'net-http-persistent'
