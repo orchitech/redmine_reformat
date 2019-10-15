@@ -4,12 +4,10 @@ require 'set'
 require 'open3'
 require 'tempfile'
 require 'timeout'
-require 'textile_to_markdown/redmine_reformat'
+require 'redmine_reformat/converters/textile_to_markdown/pandoc_preprocessing'
 
-module TextileToMarkdown
-  class ConvertString
-
-
+module RedmineReformat::Converters::TextileToMarkdown
+  class Converter
     # receives textile, returns markdown
     def self.call(textile, reference = nil)
       new(textile, reference).call
@@ -39,7 +37,7 @@ module TextileToMarkdown
     end
 
     private
-    include TextileToMarkdown::RedmineReformat
+    include RedmineReformat::Converters::TextileToMarkdown::PandocPreprocessing
 
     def pre_process_textile(textile)
 
@@ -169,7 +167,6 @@ module TextileToMarkdown
     def exec_with_timeout(cmd, timeout: 10, stdin:)
       pid = nil
       result = nil
-
       begin
         Timeout.timeout(timeout) do
           Open3.popen2(cmd) do |i, o, t|
@@ -187,5 +184,4 @@ module TextileToMarkdown
       result
     end
   end
-
 end

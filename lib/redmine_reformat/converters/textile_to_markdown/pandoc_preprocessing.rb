@@ -5,11 +5,13 @@
 # Contains portions of Redmine and Redcloth3 code
 
 require 'redmine_reformat/converters/placeholders'
-require 'textile_to_markdown/markdown-table-formatter/table-formatter'
+require 'redmine_reformat/converters/textile_to_markdown/markdown-table-formatter/table-formatter'
 require 'htmlentities'
 
 module RedmineReformat::Converters::TextileToMarkdown
   module PandocPreprocessing
+
+    Placeholders = RedmineReformat::Converters::Placeholders
 
     # treat '==' as <notextile> ?
     CONF_NOTEXTILE_2EQS = false

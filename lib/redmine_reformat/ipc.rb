@@ -1,4 +1,4 @@
-module TextileToMarkdown
+module RedmineReformat
   class Ipc
     def initialize(name, rfd, wfd)
       @name = name

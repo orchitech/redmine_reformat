@@ -1,8 +1,6 @@
-require 'textile_to_markdown/convert_string'
+require 'redmine_reformat/converters/textile_to_markdown/converter'
 require 'ostruct'
 require 'action_view'
-
-require 'textile_to_markdown/application_helper_patch'
 require 'net/http/persistent'
 
 module RedmineReformat
@@ -126,7 +124,7 @@ module RedmineReformat
 
     def call(exn)
       @exn = exn
-      @dryrun = false
+      @dryrun = true
       #ActiveRecord::Base.logger = Logger.new(STDOUT)
 
       Project.transaction do
@@ -273,7 +271,7 @@ module RedmineReformat
     JWM_PROJECT_IDS = [
     ]
     def convert(text, ctx)
-      return text + 'END'
+      #return text + 'END'
       if @original_text_formatting == 'textile'
         if JWM_ITEMS.include?(ctx[:item]) && JWM_PROJECT_IDS.include?(ctx[:project_id])
           md = convertJwmToHtmlToMd(text, ctx[:ref])
@@ -288,7 +286,7 @@ module RedmineReformat
     end
 
     def convertTextileToMd(textile, reference)
-      ConvertString.(textile, reference)
+      RedmineReformat::Converters::TextileToMarkdown::Converter.(textile, reference)
     end
 
     TURNDOWN_URI = URI('http://localhost:4000')

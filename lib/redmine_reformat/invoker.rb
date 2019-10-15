@@ -1,3 +1,9 @@
+# frozen_string_literal: true
+
+require 'redmine_reformat/ipc'
+require 'redmine_reformat/progress'
+require 'redmine_reformat/execution'
+
 module RedmineReformat
 
   class Invoker
@@ -21,9 +27,9 @@ module RedmineReformat
           pipes.flatten.each do |fd|
             fd.close unless worker_ipc.use_fd?(fd)
           end
-          progress = ReformatWorkerProgress.new(i, PARALLEL, progress_ipc)
-          wexn = ReformatWorkerExecution.new(i, PARALLEL, worker_ipc, progress)
-          TextileToMarkdown::ConvertRedmine.call(wexn)
+          progress = RedmineReformat::ReformatWorkerProgress.new(i, PARALLEL, progress_ipc)
+          wexn = RedmineReformat::Execution.new(i, PARALLEL, worker_ipc, progress)
+          ConvertRedmine.call(wexn)
           exit 0
         end
       end
