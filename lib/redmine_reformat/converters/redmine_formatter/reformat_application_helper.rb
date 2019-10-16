@@ -1,6 +1,27 @@
-require 'application_helper'
+# frozen_string_literal: true
 
-module TextileToMarkdown
+require 'application_helper'
+require 'singleton'
+require 'action_view'
+
+module RedmineReformat::Converters::RedmineFormatter
+  class ReformatApplicationHelper
+    include Singleton
+    include ERB::Util
+    include ActionView::Helpers::TextHelper
+    include ActionView::Helpers::SanitizeHelper
+    include ActionView::Helpers::UrlHelper
+    include Rails.application.routes.url_helpers
+    include ApplicationHelper
+
+    def initialize
+      User.current = nil
+      unless ApplicationHelper.included_modules.include? ApplicationHelperPatch
+        ApplicationHelper.send(:include, ApplicationHelperPatch)
+      end
+    end
+  end
+
   module ApplicationHelperPatch
     def self.included(base)
       base.send(:include, InstanceMethods)

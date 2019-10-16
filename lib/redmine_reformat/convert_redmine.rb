@@ -1,7 +1,6 @@
-require 'redmine_reformat/converters/textile_to_markdown/converter'
 require 'ostruct'
-require 'action_view'
-require 'net/http/persistent'
+require 'redmine_reformat/converters/textile_to_markdown/converter'
+require 'redmine_reformat/converters/redmine_formatter/converter'
 
 module RedmineReformat
 
@@ -66,14 +65,6 @@ module RedmineReformat
   end
 
   class ConvertRedmine
-
-    #include ActionView::Helpers::SanitizeHelper
-    include ERB::Util
-    include ActionView::Helpers::TextHelper
-    include ActionView::Helpers::SanitizeHelper
-    include ActionView::Helpers::UrlHelper
-    include Rails.application.routes.url_helpers
-    include ApplicationHelper
 
     BATCHSIZE = 100 # xxx remove
 
@@ -143,16 +134,6 @@ module RedmineReformat
       end
       @exn.tx_done
       exit 0
-      @http = Net::HTTP::Persistent.new name: 'redmine_reformat'
-      @http.retry_change_requests = true
-      User.current = nil
-      unless ApplicationHelper.included_modules.include? TextileToMarkdown::ApplicationHelperPatch
-        ApplicationHelper.send(:include, TextileToMarkdown::ApplicationHelperPatch)
-      end
-      #puts Setting.text_formatting
-      #uts textilizable("\n\nh1. Hey\n\n{{toc}}\n\n!myimg.png! #7194\n")
-      #puts textilizable("\n\n[[orchitech:WikiLink]] #7194\n", {:only_path => true})
-      #exit 0
       decide_transaction do
         Mailer.with_deliveries(false) do
           @original_text_formatting = Setting.text_formatting
@@ -271,7 +252,6 @@ module RedmineReformat
     JWM_PROJECT_IDS = [
     ]
     def convert(text, ctx)
-      #return text + 'END'
       if @original_text_formatting == 'textile'
         if JWM_ITEMS.include?(ctx[:item]) && JWM_PROJECT_IDS.include?(ctx[:project_id])
           md = convertJwmToHtmlToMd(text, ctx[:ref])
@@ -286,7 +266,8 @@ module RedmineReformat
     end
 
     def convertTextileToMd(textile, reference)
-      RedmineReformat::Converters::TextileToMarkdown::Converter.(textile, reference)
+      @c ||= RedmineReformat::Converters::TextileToMarkdown::Converter.new
+      @c.convert(textile, reference)
     end
 
     TURNDOWN_URI = URI('http://localhost:4000')

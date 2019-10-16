@@ -8,11 +8,13 @@ require 'redmine_reformat/converters/textile_to_markdown/pandoc_preprocessing'
 
 module RedmineReformat::Converters::TextileToMarkdown
   class Converter
-    # receives textile, returns markdown
-    def self.call(textile, reference = nil)
-      new(textile, reference).call
+    def convert(text, reference = nil)
+      Conversion.new(text, reference).call
     end
+  end
 
+  class Conversion
+    # receives textile, returns markdown
     def initialize(textile, reference = nil)
       @textile = textile.dup
       @reference = reference
