@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require 'application_helper'
 require 'singleton'
 require 'action_view'
+require 'application_helper'
 
 module RedmineReformat::Converters::RedmineFormatter
   class ReformatApplicationHelper

@@ -13,6 +13,7 @@ module RedmineReformat::Converters::TextileToMarkdown
     end
   end
 
+  private
   class Conversion
     # receives textile, returns markdown
     def initialize(textile, reference = nil)

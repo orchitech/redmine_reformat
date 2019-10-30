@@ -1,10 +1,19 @@
+require 'redmine_reformat/converters/configured_converters'
+
 module RedmineReformat
   class Execution
-    def initialize(index, wcount, ipc, progress)
-      @index = index
-      @wcount = wcount
-      @ipc = ipc
+    attr_accessor :dryrun, :converter, :to_formatting
+
+    ConfiguredConverters = RedmineReformat::Converters::ConfiguredConverters
+
+    def initialize(progress, ipc = nil)
+      @ipc = ipc || DummyIpc.new
+      @index = @ipc.index
+      @wcount = @ipc.count
       @progress = progress
+      @dryrun = false
+      @converter = nil
+      @to_formatting = nil
     end
 
     def master?
@@ -18,6 +27,7 @@ module RedmineReformat
     def start
       v = reduce_rendezvous(:start) {|v| v + 1}
       if v == @wcount
+        @converter ||= ConfiguredConverters.new(DEFAULT_CONVERTER_CONFIG)
         STDERR.puts "All #{v}/#{@wcount} workers started." if master?
       else
         fail "#{t} failed, only #{v}/#{@wcount} workers confirmed start"
@@ -35,7 +45,7 @@ module RedmineReformat
         .from(scope.offset(offset).limit(limit).select(:id))
         .reorder(nil)
         .first
-      
+
       @progress.start(item, mymeta.count_id, total)
       myscope = scope.where(id: mymeta.min_id..mymeta.max_id)
       myscope
@@ -96,5 +106,13 @@ module RedmineReformat
       @ipc.close
       exit 1
     end
+
+    DEFAULT_CONVERTER_CONFIG = [
+      {
+        from_formatting: 'textile',
+        to_formatting: 'markdown',
+        converters: 'TextileToMarkdown'
+      }
+    ]
   end
 end

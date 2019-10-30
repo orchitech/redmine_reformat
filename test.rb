@@ -1,11 +1,9 @@
 $: << File.join(File.dirname(__FILE__), 'lib')
 
 require 'getoptlong'
-require 'textile_to_markdown/convert_string'
+require 'redmine_reformat/converters/textile_to_markdown/converter'
 
-require 'textile_to_markdown/markdown-table-formatter/table-formatter'
-
-Dir.chdir(File.join(File.dirname(__FILE__), 'test', 'fixtures'))
+Dir.chdir(File.join(File.dirname(__FILE__), 'test', 'fixtures', 'textile_to_markdown'))
 
 def temp_file(name, content)
     file = Tempfile.new(name)
@@ -36,13 +34,14 @@ test_pattern = ARGV[0] unless ARGV.length.zero?
 
 failed = 0
 succeeded = 0
+converter = RedmineReformat::Converters::TextileToMarkdown::Converter.new
 Dir.glob("#{test_pattern}.textile").each do |textile|
   md = textile.sub(/(\.textile)?$/, '.md')
   md = '/dev/null' unless overwrite or File.exists?(md)
   name = textile.sub(/\.textile$/, '')
 
   input = File.read(textile)
-  actual = TextileToMarkdown::ConvertString.(input, name)
+  actual = converter.convert(input, name)
 
   if show_diff
     expected = File.read(md)

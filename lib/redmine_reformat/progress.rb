@@ -90,20 +90,18 @@ module RedmineReformat
   end
 
   class ReformatWorkerProgress < ReformatProgress
-    def initialize(index, wcount, ipc)
+    def initialize(ipc)
       super()
-      @index = index
-      @wcount = index
       @ipc = ipc
     end
 
     def start(item, jobcount, count)
-      super(item, jobcount, count)
+      super
       @ipc.send(:start, item, jobcount, count)
     end
 
     def progress(item, count)
-      super(item, count)
+      super
       @ipc.send(:progress, item, count)
     end
 

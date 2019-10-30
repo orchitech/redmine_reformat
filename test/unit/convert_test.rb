@@ -1,7 +1,7 @@
 require_relative '../test_helper'
-require 'textile_to_markdown/convert_string'
+require 'redmine_reformat/converters/textile_to_markdown/converter'
 
-class ConvertTest < ActiveSupport::TestCase
+class TextileToMarkdownConverterTest < ActiveSupport::TestCase
 
   test "should convert textile to markdown (general test case)" do
     check_conversion "test"

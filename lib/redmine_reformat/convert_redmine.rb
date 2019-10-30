@@ -5,10 +5,10 @@ require 'redmine_reformat/converters/redmine_formatter/converter'
 module RedmineReformat
 
   class Spec
-    def initialize(clazz, cols, subset = nil, args = {})
-      @clazz = clazz
+    def initialize(klass, cols, subset = nil, args = {})
+      @klass = klass
       @cols = Array(cols)
-      @item = "#{clazz.name}#{'[' + subset + ']' if subset}"
+      @item = "#{klass.name}#{'[' + subset + ']' if subset}"
       @joins = args[:joins]
       @where = Array(args[:where])
       @project_id_col = args[:project_id] || 'NULL'
@@ -18,7 +18,7 @@ module RedmineReformat
 
     BATCHSIZE = 100
     def pluck_each(exn, &block)
-      scope = @clazz
+      scope = @klass
       id_col = "#{scope.table_name}.id"
 
       scope = scope.joins(@joins) if @joins
@@ -44,7 +44,7 @@ module RedmineReformat
           project_id = r.shift
           ctxvals = Hash[@ctxcols.zip(r.shift(@ctxcols.length))]
           ctx = OpenStruct.new({
-            clazz: @clazz,
+            klass: @klass,
             item: @item,
             id: id,
             project_id: project_id,
@@ -115,17 +115,18 @@ module RedmineReformat
 
     def call(exn)
       @exn = exn
-      @dryrun = true
       #ActiveRecord::Base.logger = Logger.new(STDOUT)
 
       Project.transaction do
         Mailer.with_deliveries(false) do
+          @from_formatting = Setting.text_formatting
+          @to_formatting = @exn.to_formatting || @from_formatting
           @exn.start
-          @original_text_formatting = Setting.text_formatting
           migrate_settings if @exn.master?
           migrate_objects
           migrate_wiki_versions
           migrate_custom_values
+          Setting.text_formatting = @to_formatting if @exn.master? && !@exn.dryrun
           unless @exn.finish(true)
             raise ActiveRecord::Rollback
           end
@@ -133,18 +134,6 @@ module RedmineReformat
         end
       end
       @exn.tx_done
-      exit 0
-      decide_transaction do
-        Mailer.with_deliveries(false) do
-          @original_text_formatting = Setting.text_formatting
-          migrate_settings
-          migrate_objects
-          migrate_wiki_versions
-          migrate_custom_values
-          Setting.text_formatting = 'markdown' unless @dryrun
-        end
-      end
-      @http.shutdown
     end
 
     private
@@ -156,13 +145,15 @@ module RedmineReformat
     end
 
     def migrate_setting(name)
-      ctx = {:item => 'Settings', :ref => "Setting\##{name}"}
+      ctx = OpenStruct.new({
+        item: 'Settings',
+        from_formatting: @from_formatting,
+        to_formatting: @to_formatting,
+        ref: "Setting\##{name}"
+      })
       if textile = Setting.send(name)
-        if md = convert(textile, ctx)
-          Setting.send "#{name}=", md unless @dryrun
-        else
-          STDERR.puts "failed to convert setting #{name}"
-        end
+        md = convert(textile, ctx)
+        Setting.send "#{name}=", md if !@exn.dryrun && md
       end
     end
 
@@ -174,7 +165,11 @@ module RedmineReformat
 
     def migrate_wiki_versions
       item = 'wiki_version'
-      ctx = {:item => item}
+      ctx = OpenStruct.new(
+        :item => item,
+        :from_formatting => @from_formatting,
+        :to_formatting => @to_formatting
+      )
 
       scope = @exn.scope(item, WikiContent::Version)
       tot = @exn.total(item)
@@ -184,18 +179,16 @@ module RedmineReformat
 
       finished = 0
       scope.includes(:page => { :wiki => :project }).find_each do |version|
-        ctx[:ref] = "WikiContent::Version\##{version.id}: "\
+        ctx.ref = "WikiContent::Version\##{version.id}: "\
           "/projects/#{version.project.identifier}"\
           "/wiki/#{version.page.title}/#{version.version}"
-        ctx[:project_id] = version.project.id
+        ctx.project_id = version.project.id
         if textile = version.text
           if md = convert(textile, ctx)
             if version.compression == 'gzip'
               md = Zlib::Deflate.deflate(md, Zlib::BEST_COMPRESSION)
             end
-            version.update_column :data, md unless @dryrun
-          else
-            STDERR.puts "failed to convert #{ref}"
+            version.update_column(:data, md) unless @exn.dryrun
           end
         end
         finished += 1
@@ -210,13 +203,13 @@ module RedmineReformat
     # convert custom values where applicable
     def migrate_custom_values
       # formatted custom fields
-      CustomField.all.to_a.select{|cf|cf.text_formatting == 'full'}.each do |cf|
+      CustomField.all.to_a.select{|cf| cf.text_formatting == 'full'}.each do |cf|
         spec = Spec.new(CustomValue, :value, cf.name, {where: [custom_field_id: cf.id]})
         migrate_spec spec
-      end 
+      end
 
       # journal details for formatted custom fields
-      IssueCustomField.all.to_a.select{|cf|cf.text_formatting == 'full'}.each do |cf|
+      IssueCustomField.all.to_a.select{|cf| cf.text_formatting == 'full'}.each do |cf|
         spec = Spec.new(JournalDetail, [:value, :old_value], "cf_#{cf.name}", {
           joins: [:journal, 'LEFT JOIN issues on issues.id = journals.journalized_id'],
           where: [property: :cf, prop_key: cf.id, journals: {journalized_type: :Issue}],
@@ -230,97 +223,21 @@ module RedmineReformat
 
     def migrate_spec(spec)
       spec.pluck_each(@exn) do |ctx, vals|
+        ctx.from_formatting = @from_formatting
+        ctx.to_formatting = @to_formatting
         updates = vals.map do |col, value|
           converted = convert(value, ctx) if value
-          if value and not converted
-            STDERR.puts "failed to convert #{ctx.ref}"
-            next
-          end
+          next if converted.nil?
           [col, converted]
         end.compact
-        unless @dryrun or updates.empty?
-          ctx.clazz.where(id: ctx.id).update_all(Hash[updates]) unless @dryrun
+        if !@exn.dryrun && !updates.empty?
+          ctx.klass.where(id: ctx.id).update_all(Hash[updates])
         end
       end
     end
 
-    JWM_ITEMS = [
-      'Issue',
-      'Journal',
-      'JournalDetail_Issues_description',
-    ]
-    JWM_PROJECT_IDS = [
-    ]
     def convert(text, ctx)
-      if @original_text_formatting == 'textile'
-        if JWM_ITEMS.include?(ctx[:item]) && JWM_PROJECT_IDS.include?(ctx[:project_id])
-          md = convertJwmToHtmlToMd(text, ctx[:ref])
-        else
-          md = convertTextileToMd(text, ctx[:ref])
-        end
-      else
-        md = convertMdToHtmlAndBack(text, ctx[:ref])
-      end
-      # browsers use \r\n, so restore it to avoid EOL differences
-      md.gsub(/\r?\n/m, "\r\n") if md
-    end
-
-    def convertTextileToMd(textile, reference)
-      @c ||= RedmineReformat::Converters::TextileToMarkdown::Converter.new
-      @c.convert(textile, reference)
-    end
-
-    TURNDOWN_URI = URI('http://localhost:4000')
-    JWM_TO_HTML_URI = URI('http://192.168.1.191:4001')
-    def convertMdToHtmlAndBack(text, reference)
-      md = html = nil
-      begin
-        html = textilizable(text, {:only_path => true, :headings => false})
-        # return unescapeHtml(data)
-        # .replace(/\$(.)/g, '$1')
-        # .replace(/<legend>.+<\/legend>/g, '')
-        # .replace(/<a name=.+?><\/a>/g, '')
-        # .replace(/<a href="#(?!note-\d+).+?>.+<\/a>/g, '');
-        md = convertUsingWebService(TURNDOWN_URI, html)
-        return md
-      rescue Exception => e
-        STDERR.puts "failed textilizable() + turndown for ref '#{reference}' due to #{e.message} - #{e.class}"
-        STDERR.puts "Text was:"
-        STDERR.puts text
-        STDERR.puts "Intermediate HTML was:"
-        STDERR.puts html
-        raise
-      end
-    end
-
-    def convertJwmToHtmlToMd(text, reference)
-      md = html = nil
-      begin
-        html = convertUsingWebService(JWM_TO_HTML_URI, text)
-        #STDERR.puts "JWM done in #{Time.now - start}"
-        #start = Time.now
-        md = convertUsingWebService(TURNDOWN_URI, html)
-        #STDERR.puts "Turndown done in #{Time.now - start}"
-        return md
-      rescue Exception => e
-        STDERR.puts "failed JWM2HTML + turndown for ref '#{reference}' due to #{e.message} - #{e.class}"
-        STDERR.puts "Text was:"
-        STDERR.puts text
-        STDERR.puts "Intermediate HTML was:"
-        STDERR.puts html
-        raise
-      end
-    end
-
-    def convertUsingWebService(uri, input)
-      req = Net::HTTP::Post.new(uri)
-      req['Content-Type'] = 'text/html; charset=UTF-8'
-      req.body = input
-      res = @http.request uri, req
-      unless res.code == '200'
-        raise "Turnddown API request failed. [code=#{res.code}, msg=#{res.msg}]"
-      end
-      return res.body
+      @exn.converter.convert(text, ctx)
     end
   end
 end
