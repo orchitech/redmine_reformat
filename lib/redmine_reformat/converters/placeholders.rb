@@ -1,7 +1,7 @@
 require 'securerandom'
 
-module TextileToMarkdown
-  module RedmineReformat
+module RedmineReformat
+  module Converters
     class Placeholders
 
       UNICODE_1CHAR_PRIV_START = "\uE000"
