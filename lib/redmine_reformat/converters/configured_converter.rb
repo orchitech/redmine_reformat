@@ -36,7 +36,7 @@ module RedmineReformat
 
       def convert(text, ctx)
         return nil unless converting?
-        @converter_chain.convert(text, ctx.reference)
+        @converter_chain.convert(text, ctx.ref)
       end
 
       private
