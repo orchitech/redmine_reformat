@@ -1,10 +1,10 @@
-require_relative "../test_helper"
-require "redmine_reformat/converters/placeholders.rb"
+require_relative '../test_helper'
+require 'redmine_reformat/converters/placeholders'
 
 class PlaceholdersTest < ActiveSupport::TestCase
   test "match_context_match should match the longest occurence" do
     text = '- --'.dup
-    ph = Placeholders.new(text)
+    ph = RedmineReformat::Converters::Placeholders.new(text)
     ph.prepare_text text
     # TODO
   end

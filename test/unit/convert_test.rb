@@ -33,13 +33,11 @@ class TextileToMarkdownConverterTest < ActiveSupport::TestCase
   end
 
   def check_conversion(name)
-    source = File.join(File.dirname(__FILE__), "../fixtures/#{name}.textile")
-    actual = TextileToMarkdown::ConvertString.(IO.read(source))
+    source = File.join(File.dirname(__FILE__), "../fixtures/textile_to_markdown/#{name}.textile")
+    converter = RedmineReformat::Converters::TextileToMarkdown::Converter.new
+
+    actual = converter.convert(IO.read(source), name)
     expected = IO.read(source.sub(/textile\z/, 'md'))
     assert_equal expected, actual
   end
-
-
-
 end
-
