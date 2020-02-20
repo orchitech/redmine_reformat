@@ -70,7 +70,7 @@ convcfg='[{
   "from_formatting": "textile",
   "to_formatting": "common_mark",
   "converters": [
-    "RedmineFormatter",
+    ["RedmineFormatter"],
     ["Ws", "http://localhost:4000/turndown-uservice"]
   ]
 }]'
@@ -146,7 +146,7 @@ Use different converter configurations for certain projects and items:
     "projects": ["syncedfromjira"],
     "items": ["Issue", "JournalDetail[Issue.description]", "Journal"],
     "converters": [
-      ["Ws", "http://amarkup2html.uservice.local:4001"],
+      ["Ws", "http://markup2html.uservice.local:4001"],
       ["Ws", "http://turndown.uservice.local:4000"]
     ]
   }, {
@@ -161,11 +161,11 @@ To convert only a part of the data, use an empty converter chain:
 [{
   "projects": ["myproject"],
   "to_formatting": "common_mark",
-  "converters": ["TextileToMd"]
+  "converters": "TextileToMd"
 }, {
   "from_formatting": "textile",
   "to_formatting": "common_mark",
-  "converters": []
+  "converters": null
 }]
 ```
 
@@ -173,6 +173,23 @@ To convert only a part of the data, use an empty converter chain:
 
 For more information on markup converters, see
 [Markup Conversion Analysis and Design](doc/markup-conversion.md).
+
+### Configuring Converters
+
+Converters are specified as an array of converter instances.
+Each converter instance is specified as an array of converter class
+name and contructor arguments.
+If there is just one converter, the outer array can be omitted,
+e.g. `[["TextileToMd"]]` can be specified as `["TextileToMd"]`.
+If such converter has no arguments, it can be specified as a string,
+e.g. `"TextileToMd"`.
+
+Please note that removing the argument-encapsulating array leads to
+misinterpreting the configuration if there are more converters. E.g.
+~~`["RedmineFormatter", ["Ws", "http://localhost:4000"]]`~~ would be
+interpreted as a single converter with an array argument. A full
+specification is required in such cases, e.g.
+`[["RedmineFormatter"], ["Ws", "http://localhost:4000"]]`.
 
 ### `TextileToMd`
 
