@@ -17,10 +17,10 @@ module RedmineReformat
       def convert(text, reference = nil)
         converted = text
         @converters.each do |c|
-          converted = c.convert(converted, reference) if text
+          converted = c.convert(converted, reference) if converted
         end
-        converted = convert_to_crlf(converted) if @force_crlf
-        converted = restore_trailing_nl(text, converted) if @match_trailing_nl
+        converted = convert_to_crlf(converted) if converted && @force_crlf
+        converted = restore_trailing_nl(text, converted) if converted && @match_trailing_nl
         converted
       end
 

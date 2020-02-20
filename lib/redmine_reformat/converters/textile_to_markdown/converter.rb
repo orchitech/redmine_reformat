@@ -36,7 +36,7 @@ module RedmineReformat::Converters::TextileToMarkdown
       ]
 
       output = exec_with_timeout(command.join(' '), stdin: @textile)
-      post_process_markdown output
+      post_process_markdown output if output
     end
 
     private
@@ -167,7 +167,7 @@ module RedmineReformat::Converters::TextileToMarkdown
       markdown
     end
 
-    def exec_with_timeout(cmd, timeout: 10, stdin:)
+    def exec_with_timeout(cmd, timeout: 30, stdin:)
       pid = nil
       result = nil
       begin
@@ -179,11 +179,14 @@ module RedmineReformat::Converters::TextileToMarkdown
           end
         end
       rescue Timeout::Error
-        Process.kill(-9, pid)
+        begin
+          Process.kill(-9, pid)
+        rescue Errno::ESRCH
+          # already killed - ignoring
+        end
         Process.detach(pid)
-        STDERR.puts 'timeout'
+        STDERR.puts("[ERROR] #{@reference} - pandoc execution timeout")
       end
-
       result
     end
   end
