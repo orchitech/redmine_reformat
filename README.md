@@ -15,8 +15,9 @@ the original.
 
 Simply do:
 ```sh
-cd $REDMINE_ROOT/plugins
-git clone https://github.com/orchitech/redmine_reformat.git
+cd $REDMINE_ROOT
+git -C plugins clone https://github.com/orchitech/redmine_reformat.git
+bundle install
 ```
 And restart your Redmine.
 
@@ -35,7 +36,7 @@ rake reformat to_formatting=markdown
 
 Dry run:
 ```sh
-rake reformat to_formatting=markdown
+rake reformat to_formatting=markdown dryrun=1
 ```
 
 Parallel processing (Unix/Linux only):
