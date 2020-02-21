@@ -1,0 +1,28 @@
+sudo: false
+language: ruby
+rvm:
+  - 2.6.5
+
+branches:
+  only:
+    - master
+
+env:
+  - REDMINE_VER=4.1.0
+  - REDMINE_VER=master
+
+before_script:
+  - wget https://github.com/jgm/pandoc/releases/download/2.9.2/pandoc-2.9.2-1-amd64.deb
+  - sudo dpkg -i pandoc-*.deb
+
+install: "echo skip bundle install"
+
+script:
+  - export TESTSPACE=/testspace
+  - export NAME_OF_PLUGIN=redmine_reformat
+  - export PATH_TO_PLUGIN=$(pwd)
+  - export PATH_TO_REDMINE=$TESTSPACE/redmine
+  - sudo mkdir $TESTSPACE
+  - sudo chown --reference $(pwd) $TESTSPACE
+  - cp test/support/* $TESTSPACE/
+  - bash -x ./.travis.sh
