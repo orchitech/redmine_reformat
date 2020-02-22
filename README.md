@@ -1,5 +1,7 @@
 # Redmine Reformat - A Swiss-Army Knife for Converting Redmine Rich Text Data
 
+[![Build Status](https://travis-ci.com/orchitech/redmine_reformat.svg?branch=master)](https://travis-ci.com/orchitech/redmine_reformat)
+
 Redmine Reformat is a [Redmine](http://www.redmine.org/) plugin providing
 a rake task for flexible rich-text field format conversion.
 
