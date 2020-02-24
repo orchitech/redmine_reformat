@@ -15,7 +15,6 @@ the original.
 
 ### Install
 
-Simply do:
 ```sh
 cd $REDMINE_ROOT
 git -C plugins clone https://github.com/orchitech/redmine_reformat.git
@@ -159,7 +158,7 @@ Use different converter configurations for certain projects and items:
 ]
 ```
 
-To convert only a part of the data, use an empty converter chain:
+To convert only a part of the data, use `null` in place of the converter chain:
 ```json
 [{
   "projects": ["myproject"],

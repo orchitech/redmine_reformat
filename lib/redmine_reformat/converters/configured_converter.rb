@@ -9,8 +9,8 @@ module RedmineReformat
           end
         end
         @items = Array(cfg[:items]) if cfg[:items]
-        @from_formatting = cfg[:from_formatting]
-        @to_formatting = cfg[:to_formatting]
+        @from_formatting = Array(cfg[:from_formatting]) if cfg[:from_formatting]
+        @to_formatting = Array(cfg[:to_formatting]) if cfg[:to_formatting]
         @converter_chain = ConverterChain.new(cfg[:converters]) if cfg[:converters]
       end
 
@@ -22,10 +22,10 @@ module RedmineReformat
           return false unless @items.include?(ctx.item)
         end
         if @from_formatting
-          return false unless ctx.from_formatting == @from_formatting
+          return false unless @from_formatting.include?(ctx.from_formatting)
         end
         if @to_formatting
-          return false unless ctx.to_formatting == @to_formatting
+          return false unless @to_formatting.include?(ctx.to_formatting)
         end
         true
       end
