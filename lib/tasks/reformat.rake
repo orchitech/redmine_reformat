@@ -1,6 +1,7 @@
 require 'json'
 
 task reformat: :environment do
+  setup_logger
   opts = {
     workers: ENV['workers'],
     dryrun: ![nil, '', '0', 'false', 'no'].include?(ENV['dryrun']),
@@ -10,6 +11,10 @@ task reformat: :environment do
   invoker = RedmineReformat::Invoker.new(opts)
   print_reformat_setup_summary(STDERR, invoker, opts[:converters_json])
   invoker.run
+end
+
+def setup_logger()
+  Rails.logger = Logger.new(STDERR, level: Logger::INFO)
 end
 
 def print_reformat_setup_summary(io, invoker, converters_json)

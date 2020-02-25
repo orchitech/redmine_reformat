@@ -115,7 +115,6 @@ module RedmineReformat
 
     def call(exn)
       @exn = exn
-      #ActiveRecord::Base.logger = Logger.new(STDOUT)
 
       Project.transaction do
         Mailer.with_deliveries(false) do
