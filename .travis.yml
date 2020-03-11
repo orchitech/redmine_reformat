@@ -8,8 +8,9 @@ branches:
     - master
 
 env:
+  - REDMINE_VER=3.4.13
+  - REDMINE_VER=4.0.6
   - REDMINE_VER=4.1.0
-  - REDMINE_VER=master
 
 before_script:
   - wget https://github.com/jgm/pandoc/releases/download/2.9.2/pandoc-2.9.2-1-amd64.deb
