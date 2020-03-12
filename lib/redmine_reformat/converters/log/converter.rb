@@ -8,7 +8,8 @@ module RedmineReformat::Converters::Log
       @print = (opts[:print] || 'none').to_sym
     end
 
-    def convert(text, reference = nil)
+    def convert(text, ctx = nil)
+      reference = ctx && ctx.ref || ''
       if reference =~ @reference_re && text =~ @text_re
         ptext = nil
         case @print

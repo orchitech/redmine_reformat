@@ -11,7 +11,8 @@ module RedmineReformat::Converters::Ws
     end
 
     # convert by posting to a web service and reading the response
-    def convert(text, reference = nil)
+    def convert(text, ctx = nil)
+      reference = ctx && ctx.ref
       req = Net::HTTP::Post.new(@uri)
       req['Content-Type'] = 'text/plain; charset=UTF-8'
       req.body = text

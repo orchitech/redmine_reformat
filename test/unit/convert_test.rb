@@ -1,3 +1,4 @@
+require 'ostruct'
 require_relative '../test_helper'
 require 'redmine_reformat/converters/textile_to_markdown/converter'
 
@@ -36,6 +37,7 @@ class TextileToMarkdownConverterTest < ActiveSupport::TestCase
     source = File.join(File.dirname(__FILE__), "../fixtures/textile_to_markdown/#{name}.textile")
     converter = RedmineReformat::Converters::TextileToMarkdown::Converter.new
 
+    ctx = OpenStruct.new(ref: name)
     actual = converter.convert(IO.read(source), name)
     expected = IO.read(source.sub(/textile\z/, 'md'))
     assert_equal expected, actual

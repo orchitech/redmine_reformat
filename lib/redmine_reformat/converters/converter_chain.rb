@@ -14,10 +14,10 @@ module RedmineReformat
         @match_trailing_nl = true
       end
 
-      def convert(text, reference = nil)
+      def convert(text, ctx = nil)
         converted = text
         @converters.each do |c|
-          converted = c.convert(converted, reference) if converted
+          converted = c.convert(converted, ctx) if converted
         end
         converted = convert_to_crlf(converted) if converted && @force_crlf
         converted = restore_trailing_nl(text, converted) if converted && @match_trailing_nl

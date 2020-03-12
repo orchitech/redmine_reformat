@@ -3,7 +3,8 @@
 module RedmineReformat::Converters::RedmineFormatter
   class Converter
     # returns HTML obtained from internal Redmine's formatter
-    def convert(text, reference = nil)
+    def convert(text, ctx = nil)
+      reference = ctx && ctx.ref
       begin
         helper = ReformatApplicationHelper.instance
         helper.textilizable(text, {:only_path => true, :headings => false})

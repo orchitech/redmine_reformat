@@ -902,7 +902,7 @@ module RedmineReformat::Converters::TextileToMarkdown
       end
     end
 
-    def md_separate_lists_redmine_friendly(text)
+    def md_separate_lists_redcarpet_friendly(text)
       text.gsub!(/\n\n<!-- end list -->\n/, "\n\n&#29;\n")
     end
 

@@ -8,17 +8,18 @@ require 'redmine_reformat/converters/textile_to_markdown/pandoc_preprocessing'
 
 module RedmineReformat::Converters::TextileToMarkdown
   class Converter
-    def convert(text, reference = nil)
-      Conversion.new(text, reference).call
+    def convert(text, ctx = nil)
+      Conversion.new(text, ctx).call
     end
   end
 
   private
   class Conversion
     # receives textile, returns markdown
-    def initialize(textile, reference = nil)
+    def initialize(textile, ctx)
       @textile = textile.dup
-      @reference = reference
+      @ctx = ctx
+      @reference = ctx.ref
       @placeholders = []
     end
 
@@ -146,8 +147,10 @@ module RedmineReformat::Converters::TextileToMarkdown
       restore_qtag_chars_to_md markdown
       md_footnotes markdown
       md_remove_auxiliary_code_block_lang markdown
-      # see http://www.redmine.org/issues/20497
-      md_separate_lists_redmine_friendly markdown
+      if @ctx.to_formatting == 'markdown'
+        # see http://www.redmine.org/issues/20497
+        md_separate_lists_redcarpet_friendly markdown
+      end
       # Restore/unescaping sequences that are protected differently in code blocks
       md_polish_before_code_restore markdown
       # Replace code and link placeholders *after* playing with the text
