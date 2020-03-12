@@ -38,7 +38,7 @@ class TextileToMarkdownConverterTest < ActiveSupport::TestCase
     converter = RedmineReformat::Converters::TextileToMarkdown::Converter.new
 
     ctx = OpenStruct.new(ref: name)
-    actual = converter.convert(IO.read(source), name)
+    actual = converter.convert(IO.read(source), ctx)
     expected = IO.read(source.sub(/textile\z/, 'md'))
     assert_equal expected, actual
   end
