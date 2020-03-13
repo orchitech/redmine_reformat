@@ -781,14 +781,21 @@ module RedmineReformat::Converters::TextileToMarkdown
         prei = $1.to_i
         code = @pre_list[prei].sub(/^<code\b([^>]*)>/, '')
         codeparam = $1
-        @pre_list[prei] = "<code>#{code}" if codeparam == ' at'
-
-        code.strip!
-        code = htmlcoder.decode(code)
+        if codeparam == ' at'
+          codeparam = ''
+          @pre_list[prei] = "<code>#{code}"
+        end
+        code = htmlcoder.decode(code.strip)
 
         escpipem = @ph.match_context_match(TABLE_PIPE_MATCH_CONTEXT)
-        if code.empty? or code.match? escpipem or (codeparam != ' at' and code.include? "\n")
+        if code.empty? or code.match? escpipem or code.include? "\n"
           # cannot convert to @
+          restore_aftercode_placeholders @pre_list[prei]
+          # pandoc interprets things inside code tags, while Redmine preserves it
+          protect_qtag_chars @pre_list[prei]
+          @pre_list[prei].gsub!(/[[:blank:]]*(#|(h[1-6]|fn\d*|bq|p)(#{A}#{C})\.)/) do |bs|
+            "<notextile>#{bs}</notextile>"
+          end
           m
         else
           # use placehoder for @

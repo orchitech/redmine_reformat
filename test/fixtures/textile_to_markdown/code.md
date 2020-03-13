@@ -10,8 +10,8 @@ Recognizing ats when tightly surrounded: (`STARTED`/`FINISHED`)
 
 ## Multiline inline code
 
-`This shall be code
-though the line breaks are lost in MD`
+<code>This shall be code  
+with a \*line\* break</code>
 
 @But block structures like lists take precedence
 
