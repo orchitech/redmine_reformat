@@ -157,7 +157,10 @@ module RedmineReformat::Converters::TextileToMarkdown
       restore_aftercode_placeholders markdown
       smooth_macros markdown
       normalize_and_rip_fenced_code_blocks markdown
-      md_use_redmine_underline markdown
+      if @ctx.to_formatting == 'markdown'
+        # Redmine-Redcarpet specific, see https://www.redmine.org/issues/28169
+        md_use_redmine_redcarpet_underline markdown
+      end
       # This should be the very last thing to break text length in table
       remove_init_breakers markdown
       md_reformat_tables markdown

@@ -40,7 +40,7 @@ Dir.glob("#{test_pattern}.textile").each do |textile|
   md = textile.sub(/(\.textile)?$/, '.md')
   md = '/dev/null' unless overwrite or File.exists?(md)
   name = textile.sub(/\.textile$/, '')
-  ctx = OpenStruct.new(ref: name)
+  ctx = OpenStruct.new(ref: name, to_formatting: 'markdown')
 
   input = File.read(textile)
   actual = converter.convert(input, ctx)
