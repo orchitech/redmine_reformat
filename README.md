@@ -235,8 +235,23 @@ external dependencies.
 
 ### `RedmineFormatter`
 
-Usage: `'RedmineFormatter'`\
-Arguments: (none)
+Usage: `['RedmineFormatter', options]`\
+Arguments:
+- `options` - a hash with optional parameters:
+  - `macros` - action to perform on Redmine macros:
+    - `keep` outputs the macros unmodified. Eventual macro text body is
+      subject to rendering. This is the default.
+    - `encode` uses encoding that should render to
+      `<code>[!]{{</code><code>macro body encoded as JSON string</code><code>}}</code>`
+      in the output. This sequence protects the macro and should be easily
+      detectable by subsequent parsers. The JSON-encoded string is always
+      delimited in quotes (`"`) and it is encoded in a way that it does
+      not contain any whitespace.
+      You need to decode it to get the original macro name, arguments,
+      parameters and text body.
+      This also means that even macros like `collapse` that accept a
+      text body to be rendered, are not rendered in this mode.
+      Makes sense to implement this in the future.
 
 `RedmineFormatter` uses monkey-patched internal Redmine renderer -
 `textilizable()`. It converts any format supported by Redmine to
@@ -258,7 +273,7 @@ in different programming languages on various platforms.
 
 Usage: `['Log', options]`\
 Arguments:
-- `options` - a hash with optional arguments:
+- `options` - a hash with optional parameters:
   - `text_re`: regexp string for text to be matched
   - `reference_re`: regexp string for references to be matched
   - `print`: what from the matched text should be printed:
