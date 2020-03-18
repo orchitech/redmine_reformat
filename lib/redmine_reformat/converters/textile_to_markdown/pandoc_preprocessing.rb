@@ -954,8 +954,8 @@ module RedmineReformat::Converters::TextileToMarkdown
       end
     end
 
-    def md_use_redmine_redcarpet_underline(text)
-      text.gsub!(/<span class="underline">(.*?)<\/span>/m, "_\\1_")
+    def md_replace_underline(text, replacement)
+      text.gsub!(/<span class="underline">(.*?)<\/span>/m, replacement)
     end
 
     def remove_init_breakers(text)
