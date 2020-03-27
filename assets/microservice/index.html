@@ -1,0 +1,49 @@
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+</head>
+<body>
+<h1><code>redmine_reformat</code> microservice test page</h1>
+
+<h2>API</h2>
+The default API of this service is using HTTP POST with input in request body
+and output in response body, as shown below.
+<pre><code>
+> POST /?to_formatting=html&from_formatting=common_mark HTTP/1.0
+> Content-Type: text/plain; charset=UTF-8
+> Content-Length: 8
+>
+# Hello!
+< HTTP/1.1 200 OK
+< Content-Type: text/html; charset=UTF-8
+< Content-Length: 30
+<
+&lt;h1>Hello!&lt;/h1&gt;</code></pre>
+
+See the <a href="https://github.com/orchitech/redmine_reformat">GitHub homepage</a> for more info.
+
+<h2>Testing form</h2>
+<p>The microservice also accepts <code>application/x-www-form-urlencoded</code> POST body.
+The text is then expected in the <code>text</code> parameter.</p>
+<form action="/" method="post" target="_blank">
+  <textarea name="text" rows="30" cols="100" target="_blank"></textarea>
+  <br />
+  <code>from_formatting</code>:
+  <select name="from_formatting">
+    <option value="">none</option>
+    <option value="textile">textile</option>
+    <option value="markdown">markdown</option>
+    <option value="common_mark" selected>common_mark</option>
+  </select>
+  <select name="to_formatting">
+    <option value="html" selected>html</option>
+    <option value="markdown">markdown</option>
+    <option value="common_mark">common_mark</option>
+  </select>
+  <input type="submit" />
+</form>
+
+<hr />
+&copy; <a href="https://orchi.tech/">Orchitech</a>. Published under the GNU GPL license.
+</body>
+</html>

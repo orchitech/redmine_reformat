@@ -32,17 +32,17 @@ The other provided converters have no direct dependencies.
 Current format Textile - convert all rich text to Markdown using the default
 `TextileToMarkdown` converter setup:
 ```sh
-rake reformat to_formatting=markdown
+rake reformat:convert to_formatting=markdown
 ```
 
 Dry run:
 ```sh
-rake reformat to_formatting=markdown dryrun=1
+rake reformat:convert to_formatting=markdown dryrun=1
 ```
 
 Parallel processing (Unix/Linux only):
 ```sh
-rake reformat to_formatting=markdown workers=10
+rake reformat:convert to_formatting=markdown workers=10
 ```
 
 If already using the `commmon_mark` format patch
@@ -53,7 +53,7 @@ convcfg='[{
   "to_formatting": "common_mark",
   "converters": "TextileToMarkdown"
 }]'
-rake reformat to_formatting=common_mark converters_json="$convcfg"
+rake reformat:convert to_formatting=common_mark converters_json="$convcfg"
 ```
 
 Convert to HTML (assuming a hypothetical `html` rich text format):
@@ -63,7 +63,7 @@ convcfg='[{
   "to_formatting": "html",
   "converters": "RedmineFormatter"
 }]'
-rake reformat to_formatting=html converters_json="$convcfg"
+rake reformat:convert to_formatting=html converters_json="$convcfg"
 ```
 
 Convert using an external web service through intermediate HTML:
@@ -76,7 +76,7 @@ convcfg='[{
     ["Ws", "http://localhost:4000/turndown-uservice"]
   ]
 }]'
-rake reformat to_formatting=common_mark converters_json="$convcfg"
+rake reformat:convert to_formatting=common_mark converters_json="$convcfg"
 ```
 
 Other advanced scenarios are covered below.
@@ -285,7 +285,46 @@ Arguments:
 debugging or searching for specific syntax within rich text data.
 The converter hands over the input as is.
 
+## Reformat Microservice
+
+For certain integration and testing use cases, it might be useful to expose
+the converter engine for use of external services. `redmine_reformat` provides
+a simple HTTP service for this purpose in the `reformat:microservice` rake
+task. The setup is very similar to the `reformat:convert` rake task.
+
+```
+rake reformat:microservice from_formatting=common_mark
+Running with setup:
+{:converters_json=>"(use default converters)",
+ :to_formatting=>nil,
+ :workers=>1,
+ :port=>3030,
+ :from_formatting=>"common_mark"}
+[2020-03-27 22:53:16] INFO  WEBrick 1.4.2
+[2020-03-27 22:53:16] INFO  ruby 2.6.5 (2019-10-01) [x86_64-linux]
+[2020-03-27 22:53:16] INFO  WEBrick::HTTPServer#start: pid=5343 port=3030
+(CTRL+C or TERM signal closes the server)
+```
+
+In the example above, visit `http://localhost:3030` to get more info on usage.
+
+The microservice works as follows:
+- Instead of reading texts and writing them to the database, it takes them
+  from HTTP POST request and returns converted text as a response body.
+- Context variables for eventual filtering and logging can be provided as
+  query parameters. That is `from_formatting`, `to_formatting`, `item`, `id`,
+  `project_id` and `ref`. If not provided, safe defaults are used.
+- `from_formatting` and `to_formatting` are required either as a default
+  in the rake task environment or as a query parameter. This differs from
+  `reformat:convert`, which takes defaults from current Redmine's settings.
+- The `workers` variable is currently ignored.
+- There is an extra attribute `port` with obvious meaning.
+
 ## History
+
+The project has its origins in Textile to Markdown conversion scripts and
+plugins for Redmine. Although there is not much of any original code left,
+we really value the community contributions of our predecessors.
 
 1. `convert_textile_to_markdown` script was built upon @sigmike
    [answer on Stack Overflow](http://stackoverflow.com/a/19876009)

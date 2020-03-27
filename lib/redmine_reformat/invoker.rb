@@ -10,11 +10,11 @@ module RedmineReformat
     attr_reader :to_formatting, :dryrun, :workers
     Ipc = RedmineReformat::Execution::Ipc
 
-    def initialize(to_formatting: nil, dryrun: false, converters_json: nil, workers: 1)
+    def initialize(to_formatting: nil, converters_json: nil, dryrun: false, workers: 1)
       @to_formatting = to_formatting
       @dryrun = !!dryrun
       @converter = RedmineReformat::Converters::from_json(converters_json) if converters_json
-      @workers = [workers.to_i, 1].max
+      @workers = [workers, 1].max
     end
 
     def run
