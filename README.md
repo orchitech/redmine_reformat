@@ -48,12 +48,10 @@ rake reformat:convert to_formatting=markdown workers=10
 If already using the `commmon_mark` format patch
 (see [#32424](https://www.redmine.org/issues/32424)):
 ```sh
-convcfg='[{
-  "from_formatting": "textile",
-  "to_formatting": "common_mark",
-  "converters": "TextileToMarkdown"
-}]'
-rake reformat:convert to_formatting=common_mark converters_json="$convcfg"
+# convert from textile:
+rake reformat:convert to_formatting=common_mark
+# convert from Redcarpet's markdown - same command:
+rake reformat:convert to_formatting=common_mark
 ```
 
 Convert to HTML (assuming a hypothetical `html` rich text format):
@@ -93,6 +91,8 @@ Other advanced scenarios are covered below.
 - Currently supported converters:
   - `TextileToMarkdown` - a Pandoc-based Textile to Markdown converter. Works on markup
     level. Battle-tested on quarter a million strings. See below for details.
+  - `MarkdownToCommonmark` - converts main specifics in old Redmine markdown format
+    (Redcarpet) to CommonMark/GFM.
   - `RedmineFormatter` - produces HTML using Redmine's internal formatter. Useful
     when chaining with external converters. See below for details.
   - `Ws` - calls an external web service, providing input in the POST body and
@@ -163,7 +163,7 @@ To convert only a part of the data, use `null` in place of the converter chain:
 [{
   "projects": ["myproject"],
   "to_formatting": "common_mark",
-  "converters": "TextileToMd"
+  "converters": "TextileToMarkdown"
 }, {
   "from_formatting": "textile",
   "to_formatting": "common_mark",
@@ -182,9 +182,9 @@ Converters are specified as an array of converter instances.
 Each converter instance is specified as an array of converter class
 name and contructor arguments.
 If there is just one converter, the outer array can be omitted,
-e.g. `[["TextileToMd"]]` can be specified as `["TextileToMd"]`.
+e.g. `[["TextileToMarkdown"]]` can be specified as `["TextileToMarkdown"]`.
 If such converter has no arguments, it can be specified as a string,
-e.g. `"TextileToMd"`.
+e.g. `"TextileToMarkdown"`.
 
 Please note that removing the argument-encapsulating array leads to
 misinterpreting the configuration if there are more converters. E.g.
@@ -193,16 +193,16 @@ interpreted as a single converter with an array argument. A full
 specification is required in such cases, e.g.
 `[["RedmineFormatter"], ["Ws", "http://localhost:4000"]]`.
 
-### `TextileToMd`
+### `TextileToMarkdown`
 
-Usage: `'TextileToMd'`\
+Usage: `'TextileToMarkdown'`\
 Arguments: (none)
 
-`TextileToMd` uses Pandoc for the actual conversion. Before pandoc is called,
+`TextileToMarkdown` uses Pandoc for the actual conversion. Before pandoc is called,
 the input text is subject to extensive preprocessing, often derived from Redmine
 code. Placeholderized parts are later expanded after pandoc conversion.
 
-`TextileToMd` is used in default converter config for source markup
+`TextileToMarkdown` is used in default converter config for source markup
 `textile` and target `markdown`.
 
 Although there is some partial parsing, the processing is rather performed
@@ -232,6 +232,40 @@ an enormous beast. The amount of code in the preprocessor is comparable
 to the Redmine/Redcloth3 renderer. It would have been better if pandoc
 hadn't been involved at all - in terms of code complexity, speed and
 external dependencies.
+
+### `MarkdownToCommonmark`
+
+Usage: `['MarkdownToCommonmark', options]`\
+Arguments:
+- `options` - a hash with optional parameters:
+  - `hard_wrap`: make hard line breaks from soft breaks, default `true`.
+  - `underline`: transform underscore underlines to `<ins>` tags,
+    default `true`.
+  - `superscript`: transform Redcarpet's caret superscripts to `<sup>`
+    tags, default `true`.
+
+`MarkdownToCommonmark` edits the source text to patch the differences
+between Redmine Redcarpet format (called `markdown`) and the new
+`common_mark` format.
+
+It parses the document with `commonmarker` (the library under the new
+`commmon_mark` format), assuming the basic overall structure is the same.
+It then walks the document tree and locates source positions to be edited.
+It is important to point out that the resulting document is not a
+result of a parse&render process, it is always the original document with
+some edits.
+
+The `hard_wrap` and `underline` replacements are quite simple, as they
+directly follow the document model provided by `commonmarker`.
+
+The `superscript` processing is far more tricky, as it does not have
+any document-forming counterpart in CommonMark/GFM. `commonmarker`
+is used to locate carets in the right document contexts and the rest
+of the processing follows reverse-engineered Redcarpet code.
+
+Macros are preserved by this converter. It also supports macros
+with text, which is preserved by default. The `collapse` macro has its
+text converted.
 
 ### `RedmineFormatter`
 

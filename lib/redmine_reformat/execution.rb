@@ -110,7 +110,7 @@ module RedmineReformat
     DEFAULT_CONVERTER_CONFIG = [
       {
         from_formatting: 'textile',
-        to_formatting: 'markdown',
+        to_formatting: ['markdown', 'common_mark'],
         converters: 'TextileToMarkdown'
       }
     ]
