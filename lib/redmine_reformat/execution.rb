@@ -111,8 +111,12 @@ module RedmineReformat
       {
         from_formatting: 'textile',
         to_formatting: ['markdown', 'common_mark'],
-        converters: 'TextileToMarkdown'
-      }
+        converters: 'TextileToMarkdown',
+      }, {
+        from_formatting: 'markdown',
+        to_formatting: 'common_mark',
+        converters: 'MarkdownToCommonmark',
+      },
     ]
   end
 end

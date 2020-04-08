@@ -1,8 +1,8 @@
 require 'ostruct'
-require_relative '../test_helper'
+require_relative '../../../test_helper'
 require 'redmine_reformat/converters/markdown_to_commonmark/converter'
 
-class MarkdownToCommonmarkConverterTest < ActiveSupport::TestCase
+class RedmineReformat::Converters::MarkdownToCommonmark::ConverterTest < ActiveSupport::TestCase
 
   def setup
     @converter = RedmineReformat::Converters::MarkdownToCommonmark::Converter.new
