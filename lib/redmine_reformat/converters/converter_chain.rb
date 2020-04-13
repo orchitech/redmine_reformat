@@ -4,14 +4,14 @@ module RedmineReformat
       attr_accessor :force_crlf
       attr_accessor :match_trailing_nl
 
-      def initialize(defs)
+      def initialize(defs, options = {})
         normdefs = Array(defs)
         normdefs = [defs] if normdefs.any? && !defs.first.is_a?(Array)
         @converters = normdefs.collect do |d|
           self.class.create_converter(*d)
         end
-        @force_crlf = true
-        @match_trailing_nl = true
+        @force_crlf = options.fetch(:force_crlf, true)
+        @match_trailing_nl = options.fetch(:match_trailing_nl, true)
       end
 
       def convert(text, ctx = nil)

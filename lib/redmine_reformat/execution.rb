@@ -115,7 +115,9 @@ module RedmineReformat
       }, {
         from_formatting: 'markdown',
         to_formatting: 'common_mark',
-        converters: 'MarkdownToCommonmark',
+        converters: ['MarkdownToCommonmark'],
+        force_crlf: false,
+        match_trailing_nl: false,
       },
     ]
   end

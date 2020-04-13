@@ -1,26 +1,43 @@
 # frozen_string_literal: true
 
-require_relative 'editor'
+require_relative '../gfm_editor'
 
 module RedmineReformat::Converters::MarkdownToCommonmark
   class Converter
+    GfmEditor = RedmineReformat::Converters::GfmEditor
+
     def initialize(opts = {})
       @replaces = {
         hard_wrap: opts.fetch(:hard_wrap, true),
         underline: opts.fetch(:underline, true),
       }
       @superscript = opts.fetch(:superscript, true)
+      @silent = opts.fetch(:silent, false)
     end
 
     def convert(text, ctx = nil)
-      reference = ctx && ctx.ref
-      text = text.dup
       return text if text.empty?
-      macros = extract_macros(text)
-      text = outplace_superscript(text) if @superscript
-      text = replace(text, @replaces) if @replaces.values.any?
-      restore_macros(text, macros)
-      text
+      reference = ctx && ctx.ref
+      converted = text.dup
+      macros = extract_macros(converted)
+      begin
+        # structural changes first
+        converted = outplace_superscript(converted) if @superscript
+        converted = replace(converted, @replaces) if @replaces.values.any?
+      rescue Exception => e
+        unless @silent
+          msg = String.new
+          msg << "Failed MarkdownToCommonmark '#{reference}' due to #{e.message} - #{e.class}\n"
+          msg << "The text was:\n"
+          msg << "#{'-' * 80}\n"
+          msg << "#{text}\n"
+          msg << "#{'-' * 80}\n"
+          STDERR.print msg
+        end
+        raise
+      end
+      restore_macros(converted, macros)
+      converted
     end
 
     private
@@ -53,7 +70,7 @@ module RedmineReformat::Converters::MarkdownToCommonmark
     # Nonstructural replaces not affecting the document structure
     # Recognized opts: :hard_wrap and :underline
     def replace(text, opts)
-      e = Editor.new(text)
+      e = GfmEditor.new(text)
       macrotext = false
       e.document.walk do |node|
         if opts[:hard_wrap] && node.type == :softbreak
@@ -82,7 +99,7 @@ module RedmineReformat::Converters::MarkdownToCommonmark
     end
 
     def outplace_superscript(text)
-      e = Editor.new(text)
+      e = GfmEditor.new(text)
       protect_until_idx = 0
       e.document.walk do |node|
         if node.type == :text
@@ -119,7 +136,7 @@ module RedmineReformat::Converters::MarkdownToCommonmark
       # nested superscripts are rare, save CPU...
       text = outplace_superscript(text) if text.include? '^'
       # escape delimiter characters in text nodes, as they are bound to this superscript
-      e = Editor.new(text)
+      e = GfmEditor.new(text)
       e.document.walk do |node|
         if node.type == :text
           e.source(node) do |textsrc, textctx|

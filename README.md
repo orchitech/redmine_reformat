@@ -100,17 +100,20 @@ Other advanced scenarios are covered below.
   - Feel free to submit more :)
 - Conversions can be chained - e.g. convert Atlassian Wiki Markup (roughly similar
   to Textile) to HTML and then HTML to Markdown using Turndown.
+- Newlines are normalized in a configurable way to make the result deterministic
+  and most matching the converted texts.
 
 ## Conversion Success Rate and Integrity
 
-`TextileToMarkdown` converter:
+### `TextileToMarkdown` converter
+
 - Uses heavy preprocessing using adapted Redmine code, which provides solid
   compatibility compared to plain pandoc usage.
 - Tested on a Redmine instance with \~250k strings ranging from tiny comments to large
   wiki pages.
 - The objects in source (Textile) and converted (Markdown) instances were
   rendered through HTML GUI, the HTMLs were normalized and diffed with exact
-  match ratio of 86% with the default `Redcarpet` Markdown renderer.
+  match ratio of 86&nbsp;% with the default `Redcarpet` Markdown renderer.
 - A significant part of the differing outputs are actually fixes of improper
   user syntax. :)
 - As `Redcarpet` is obsolete and cannot encode all the rich text constructs,
@@ -123,27 +126,51 @@ Other advanced scenarios are covered below.
 - Please note that 100% match is not even desired, see below for more details.
   We believe that the accuracy is approaching 100% of what's possible to match.
 
-Conversion integrity:
+### `MarkdownToCommonmark` converter
+
+- Works solely on the text source level and mostly just performs insertions
+  or simple replaces of very short pieces of text/tags. So data loss is
+  unlikely.
+- Tested on \~250k strings obtained from `TextileToMarkdown` with a
+  modification that trimmed trailing whitespace to emulate soft breaks wherever
+  possible. No data malformations observed - due to the nature of the converter
+  indeed.
+
+  Rendered Redmine objects were then compared (a) when the format was
+  just switched in the settings and (b) when `MarkdownToCommonmark` converter was
+  used.\
+  The rendering match is hard to estimate since the input is still artificial
+  and we haven't updated our diff-normalizers to ignore specifics of
+  `markdown` and `common_mark` formatter pair. So we can only say it should be
+  better than 85&nbsp;%. And the user perception was actually more than
+  100&nbsp;% (LOL), as the GFM result was closer to the very former
+  Textile documents than the intermediate Redcarpet Markdown.
+- Mass-scale testing on truly user-entered strings is still needed. If your
+  system uses Redcarpet Markdown, please share your results.
+
+### Conversion integrity
+
 - Guaranteed using database transaction(s) covering whole conversion.
 - There are a few places where Redmine does not use `ORDER BY`. The order then
   depends on DB implementation and usually reflects record insertion or
   modification order. The conversion is done in order of IDs, which helps to
   keep the unordered order stable. Indeed, not guaranteed at all.
 
-Parallel processing:
+### Parallel processing
+
 - Data are split in non-overlapping sets and then divided among worker
   processes.
 - Each worker is converting its own data subset in its own transaction. After
   successful completion, the worker waits on all other workers to complete
-  successfuly before commiting the transaction.
+  successfully before committing the transaction.
 - The ID-ordered conversion is also ensured in parallel processing - each
-  transaction has its ID range and transactions are commited on order of
+  transaction has its ID range and transactions are committed on order of
   their ID ranges.
 
 ## Advanced Scenarios
 
 Use different converter configurations for certain projects and items:
-```json
+``` json
 [{
     "projects": ["syncedfromjira"],
     "items": ["Issue", "JournalDetail[Issue.description]", "Journal"],
@@ -159,7 +186,7 @@ Use different converter configurations for certain projects and items:
 ```
 
 To convert only a part of the data, use `null` in place of the converter chain:
-```json
+``` json
 [{
   "projects": ["myproject"],
   "to_formatting": "common_mark",
@@ -171,6 +198,32 @@ To convert only a part of the data, use `null` in place of the converter chain:
 }]
 ```
 
+After text passes through a converter chain, newlines are normalized
+in two ways:
+- Output trailing newlines are made to match input trailing newlines.
+  It is neither desired to introduce the _"no newline at end of file"_
+  problem, nor it is nice to convert a simple `ok` string to `ok\n`.
+  As various converters either add or strip trailing newlines, this
+  step fixes it.
+- All newlines are converted to CRLF by default. This is because CRLF
+  newlines are submitted from web browsers by default, even if both
+  your server and client run on Linux. Text processing often convert
+  newlines to LF to make their work easier and this step ensures
+  uniform result.
+
+But some converter chains might not need this behavior, so it is
+configurable. For example, this is the default config for conversion
+of `markdown` to `common_mark`:
+``` json
+{
+"from_formatting": "markdown",
+"to_formatting": "common_mark",
+"converters": ["MarkdownToCommonmark"],
+"force_crlf": false,
+"match_trailing_nl": false
+}
+```
+
 ## Provided Converters
 
 For more information on markup converters, see
@@ -180,7 +233,7 @@ For more information on markup converters, see
 
 Converters are specified as an array of converter instances.
 Each converter instance is specified as an array of converter class
-name and contructor arguments.
+name and constructor arguments.
 If there is just one converter, the outer array can be omitted,
 e.g. `[["TextileToMarkdown"]]` can be specified as `["TextileToMarkdown"]`.
 If such converter has no arguments, it can be specified as a string,
@@ -215,13 +268,13 @@ on source level and even some user intentions are recognized:
   to the current Textile parser in Redmine. Again, it is usually a user
   mistake and this was changing over time in Redmine. For example, lists
   were allowed to be space-indented until Redmine 3.4.7.
-- Footnote refernces bypass pandoc and reconstructed using the placeholder
+- Footnote references bypass pandoc and reconstructed using the placeholder
   mechanism.
 - Unbalanced code blocks are tried to be detected and handled correctly.
 
 Generated Markdown is intended to be as compatible as possible since, so
 that it works even with the Redcarpet Markdown renderer. E.g. Markdown tables
-are formatted in ASCII Art-ish format, as there were cases wher compacted
+are formatted in ASCII Art-ish format, as there were cases where compacted
 tables were not recognized correctly by Redcarpet.
 
 See the test fixtures for more details. We admin the conversion is opinionated
@@ -250,10 +303,17 @@ between Redmine Redcarpet format (called `markdown`) and the new
 
 It parses the document with `commonmarker` (the library under the new
 `commmon_mark` format), assuming the basic overall structure is the same.
-It then walks the document tree and locates source positions to be edited.
-It is important to point out that the resulting document is not a
-result of a parse&render process, it is always the original document with
-some edits.
+In the end, a patched alternative
+[`commonmarker_fixed_sourcepos`](https://github.com/orchitech/commonmarker/tree/fix-sourcepos)
+with [patched `cmark-gfm`](https://github.com/orchitech/cmark-gfm/tree/fix-sourcepos)
+underlying library had to be created and used, as we rely on correct
+_source position_ information, which is broken or missing without the patches.
+
+The converter walks through the document tree and locates source positions
+to be edited. It is important to point out the output document is not a
+result of a parse&render process. Although the parser is involved, it only
+computes instructions like _insert two spaces at the end of line 5_.
+The output is always the original document with some edits.
 
 The `hard_wrap` and `underline` replacements are quite simple, as they
 directly follow the document model provided by `commonmarker`.
@@ -265,7 +325,10 @@ of the processing follows reverse-engineered Redcarpet code.
 
 Macros are preserved by this converter. It also supports macros
 with text, which is preserved by default. The `collapse` macro has its
-text converted.
+text content converted.
+
+For detailed behavior examples, see the
+[`MarkdownToCommonmark` unit test](https://github.com/orchitech/redmine_reformat/blob/master/test/unit/converters/markdown_to_commonmark/converter_test.rb).
 
 ### `RedmineFormatter`
 
@@ -298,7 +361,7 @@ Usage: `['Ws', '<url>']`\
 Arguments:
 - `url` - address of the web service that performs conversion.
 
-`Ws` performs HTTP POST request to the given URL and passess
+`Ws` performs HTTP POST request to the given URL and passes
 text to convert in the request body. The result is expected in the
 response body. This allows fast and easy integration with converters
 in different programming languages on various platforms.

@@ -11,7 +11,7 @@ module RedmineReformat
         @items = Array(cfg[:items]) if cfg[:items]
         @from_formatting = Array(cfg[:from_formatting]) if cfg[:from_formatting]
         @to_formatting = Array(cfg[:to_formatting]) if cfg[:to_formatting]
-        @converter_chain = ConverterChain.new(cfg[:converters]) if cfg[:converters]
+        @converter_chain = ConverterChain.new(cfg[:converters], cfg) if cfg[:converters]
       end
 
       def matches?(ctx)

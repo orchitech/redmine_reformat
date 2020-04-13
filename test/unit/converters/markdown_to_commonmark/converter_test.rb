@@ -2,15 +2,15 @@ require 'ostruct'
 require_relative '../../../test_helper'
 require 'redmine_reformat/converters/markdown_to_commonmark/converter'
 
-class RedmineReformat::Converters::MarkdownToCommonmark::ConverterTest < ActiveSupport::TestCase
+class RedmineReformat::Converters::ConverterTest < ActiveSupport::TestCase
 
   def setup
     @converter = RedmineReformat::Converters::MarkdownToCommonmark::Converter.new
     @ctx = OpenStruct.new(ref: self.class.name, to_formatting: 'common_mark')
   end
 
-  test "should convert soft breaks to hard breaks" do
-    # and should preserve line ends too
+  test "should convert soft break to hard break while respecting paragraph" do
+    # and should preserve line endings too
     text = "foo\r\nbar  \nbaz\n\nfoo"
     expected = "foo  \r\nbar  \nbaz\n\nfoo"
     assert_equal expected, @converter.convert(text, @ctx)
@@ -28,6 +28,18 @@ class RedmineReformat::Converters::MarkdownToCommonmark::ConverterTest < ActiveS
     assert_equal expected, @converter.convert(text, @ctx)
   end
 
+  test "should not convert escaped carets" do
+    text = "foo\\^bar foo\\\\\\^bar"
+    expected = text
+    assert_equal expected, @converter.convert(text, @ctx)
+  end
+
+  test "should not confuse escaped backslash with escaped caret" do
+    text = "foo\\\\^bar"
+    expected = "foo\\\\<sup>bar</sup>"
+    assert_equal expected, @converter.convert(text, @ctx)
+  end
+
   test "should terminate superscript by left-bound inlines" do
     text = "*foo^(bar*.baz)* *foo^bar*.baz"
     expected = "*foo^(bar*.baz)* *foo<sup>bar</sup>*.baz"
@@ -41,9 +53,10 @@ class RedmineReformat::Converters::MarkdownToCommonmark::ConverterTest < ActiveS
   end
 
   test "should mimick weird Redcarpet superscript backslash behavior" do
-    # users are not very disciplined at using backticks
+    # Users are not very disciplined at using backticks.
     text = "your password: foo^(bar\\x"
-    # it should still be possible to guess it at least
+    # The 'x' is lost by Redcarpet rendering and the source was a lifesaver for recovery.
+    # Make sure it can be somewhat recovered even after conversion.
     expected = "your password: foo<sup>bar\\\\<!-- x --></sup>"
     assert_equal expected, @converter.convert(text, @ctx)
   end

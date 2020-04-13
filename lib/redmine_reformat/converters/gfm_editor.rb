@@ -1,15 +1,18 @@
 # frozen_string_literal: true
 
-require 'commonmarker'
+require 'commonmarker_fixed_sourcepos'
 require_relative 'source_pos'
 
-module RedmineReformat::Converters::MarkdownToCommonmark
-  class Editor
+module RedmineReformat::Converters
+  class GfmEditor
 
     CMARK_PARSE_OPTS = [:STRIKETHROUGH_DOUBLE_TILDE, :FOOTNOTES]
     # SOURCEPOS actually affects also parsing
     CMARK_RENDER_OPTS = [:SOURCEPOS]
     CMARK_EXTS = [:table, :strikethrough, :autolink]
+
+    CommonMarker = CommonMarkerFixedSourcepos
+    BUGGY_SOURCEPOS = false
 
     def initialize(text)
       @text = text.encode('UTF-8')
@@ -82,8 +85,8 @@ module RedmineReformat::Converters::MarkdownToCommonmark
       index(lineno, 1)..index(lineno, @lines[lineno].length)
     end
 
-    def line(lineno, sanitycheck = nil, &block)
-      source(line_range(lineno), sanitycheck, &block)
+    def line(lineno, pattern = nil, &block)
+      source(line_range(lineno), pattern, &block)
     end
 
     def replace(range, replacement, ctx = nil)
@@ -101,12 +104,15 @@ module RedmineReformat::Converters::MarkdownToCommonmark
       if @replacements.key? range
         @replacements[range] << insertion
       else
+        ### XXX
+        # edit(name, range, insertion.dup)
         edit(name, range, insertion)
       end
     end
 
     def apply
-      out = String.new(capacity: @text.bytesize + @text.bytesize << 4 + 16)
+      capacity = @text.bytesize + (@text.bytesize >> 2) + 16
+      out = String.new(capacity: capacity)
       idx = 0
       @ranges.each do |range|
         out << @text.slice(idx...range.first)
@@ -196,7 +202,7 @@ module RedmineReformat::Converters::MarkdownToCommonmark
       nodepos = node.sourcepos.dup
       # code node sourcepos excludes the backticks -> extend to inner delimiter first
       nodepos[:start_column] -= 1
-      # end column can even be legally zero
+      # end column can be legally zero
       nodepos[:end_column] += 1
       raise RangeError, nodepos unless nodepos.values.all? { |p| p > 0 }
 
@@ -205,6 +211,7 @@ module RedmineReformat::Converters::MarkdownToCommonmark
       delimpos1, delimpos2 = spos.dup, spos.dup
       delim1, delim2 = nil, nil
 
+      # catch start pos
       delimpos1.endpos = delimpos1.startpos
       delimpos1.start_column = 1
       source(delimpos1, /(`+)\s*$/) do |delims, range, m|
@@ -212,10 +219,10 @@ module RedmineReformat::Converters::MarkdownToCommonmark
         delim1 = m[1]
       end
 
-      # fix end pos, skip eventual space padding and the delimiter
+      # catch end pos
       delimpos2.startpos = delimpos2.endpos
       delimpos2.end_column = line_length(delimpos2.end_line)
-      if spos.end_line > spos.start_line
+      if BUGGY_SOURCEPOS && spos.end_line > spos.start_line
         # leading spaces are not counted at multiline code end line - weird
         start_column = delimpos2.start_column
         delimpos2.start_column = 1
@@ -235,40 +242,10 @@ module RedmineReformat::Converters::MarkdownToCommonmark
     end
 
     def sourcepos_softbreak(node)
-      prevnodepos = (prev = node.previous) && prev.sourcepos
-      return nil unless prevnodepos && prevnodepos[:end_line] > 0
-      lineno = prevnodepos[:end_line]
-      linepos = SourcePos.new([lineno, 1], [lineno, line_length(lineno)])
-      source(linepos, /(?:\r?\n|\r)$/) do |nl, range, m|
-        linepos.start_column = linepos.end_column - m[0].length + 1
-      end
-      linepos
-    end
-
-    # work around sourcepos bug in strikethrough extension
-    def sourcepos_strikethrough(node)
-      nextnode = node.next
-      nextspos = nil
-      while nextnode && (nextspos = sourcepos(nextnode)).nil?
-        nextnode = nextnode.next
-      end
-      if nextspos
-        termcharpos = nextspos.startpos
-      else
-        parentspos = sourcepos(node.parent)
-        termcharpos = parentspos && parentspos.endpos
-      end
-      return nil unless termcharpos
-      start_bytepos = [node.sourcepos[:start_line], node.sourcepos[:start_column]]
-      spos = SourcePos.new(charpos(*start_bytepos, -1), termcharpos)
-      source(spos, /\A~~(?:\\.|[^\\])*?(?<!\p{Zs}|[\s\f~])~~/m) do |source, range, m|
-        lines = m[0].lines
-        if lines.length > 1
-          raise RangeError, node unless lines[-1].bytesize == node.sourcepos[:end_column]
-          spos.endpos = [spos.start_line + lines.length - 1, lines[-1].length]
-        end
-      end
-      spos
+      nodepos = node.sourcepos.dup
+      nodepos[:end_line] = nodepos[:start_line]
+      nodepos[:end_column] = line(nodepos[:start_line]).bytesize
+      to_sourcepos(nodepos)
     end
 
     def parse_lines(text)
