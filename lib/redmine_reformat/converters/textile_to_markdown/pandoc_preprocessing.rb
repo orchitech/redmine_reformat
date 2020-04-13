@@ -54,7 +54,8 @@ module RedmineReformat::Converters::TextileToMarkdown
     PIPE_HTMLENT_MATCH = '&vert;|&#124;|&#[xX]7[cC];'
     PIPE_HTMLENT = '&#124;'
 
-    def initialize_reformatter(text, reference)
+    def initialize_reformatter(text, format_opts, reference)
+      @format_opts = format_opts
       @ph = Placeholders.new(text, reference)
       @ph.prepare_text(text)
       @pre_list = []
@@ -475,16 +476,50 @@ module RedmineReformat::Converters::TextileToMarkdown
       text.gsub!(/@/) {|m| @ph.ph_for(m, :none)}
     end
 
-    def protect_wiki_links(text)
-      # protect wiki links
+    def protect_wiki_links(text, in_table = nil)
+      if in_table.nil?
+        text.replace(text.split(BLOCKS_GROUP_RE).collect do |blk|
+          blk.strip!
+          blk.gsub(TABLE_RE) do |m|
+            protect_wiki_links m, true
+            m
+          end
+        end.join("\n\n"))
+      end
       # eat and escape even the following '(', which might be interpreted as a MD link
-      text.gsub!(/(!?\[\[[^\]\n\|]+(?:\|[^\]\n\|]+)?\]\])(( *\n? *)\()?/m) do |link|
-        wiki_link, parenthesis_after, parenthesis_indent = $1, $2, $3
-        if parenthesis_after
-          link = "#{wiki_link}#{parenthesis_indent}\\("
+      text.gsub!(/(!?\[\[(([^\]\n\|]+)(?:\|([^\]\n\|]+))?)\]\])(( *\n? *)\()?/m) do
+        wiki_link, link_body, target, display = $~[1..4]
+        parenth_after, parenth_indent = $5, $6
+        parenth_after = "#{parenth_indent}\\(" if parenth_after
+        parenth_after ||= ""
+        if @format_opts[:wiki_links_atomic]
+          # needs to be restored after table processing because of pipe character
+          "#{wiki_link}#{parenth_after}".gsub(/[#{PANDOC_WORD_BOUNDARIES}]/) do |m|
+            @ph.ph_for(m, :none, :after_table_reformat)
+          end
+        elsif in_table && display && !@format_opts[:table_pipe_escaping]
+          # no way to convert this without pipe escaping -> outplace display text
+          protect_qtag_chars target
+          protect_qtag_chars display
+          res = String.new
+          res << '[['.each_char.map {|c| @ph.ph_for(c, :none, :after_table_reformat)}.join
+          res << target
+          res << ']]'.each_char.map {|c| @ph.ph_for(c, :none, :after_table_reformat)}.join
+          res << ' - '
+          res << display
+          res << parenth_after.each_char.map {|c| @ph.ph_for(c, :none, :after_table_reformat)}.join
+        else
+          protect_qtag_chars link_body
+          in_table and link_body.gsub!('|') do
+            '\\|'.each_char.map {|c| @ph.ph_for(c, :none, :after_table_reformat)}.join
+          end
+          res = String.new
+          res << '[['.each_char.map {|c| @ph.ph_for(c, :none, :after_table_reformat)}.join
+          res << link_body
+          res << ']]'.each_char.map {|c| @ph.ph_for(c, :none, :after_table_reformat)}.join
+          res << parenth_after.each_char.map {|c| @ph.ph_for(c, :none, :after_table_reformat)}.join
+          res
         end
-        # needs to be restored after table processing because of pipe character
-        link.gsub(/[#{PANDOC_WORD_BOUNDARIES}]/) {|m| @ph.ph_for(m, :none, :after_table_reformat)}
       end
     end
 
@@ -529,7 +564,7 @@ module RedmineReformat::Converters::TextileToMarkdown
           rows = []
           fullrow.gsub!(/([^|\s])\s*\n/, "\\1<br />")
           fullrow.each_line do |row|
-            ratts, row = pba( $1, 'tr' ), $2 if row =~ /^(#{A}#{C}\. )(.*)/m
+            row = $2 if row =~ /^(#{A}#{C}\. )(.*)/m
             cells = []
             # the regexp prevents wiki links with a | from being cut as cells
             row.scan(/\|(_?#{S}#{A}#{C}\. ?)?((\[\[[^|\]]*\|[^|\]]*\]\]|[^|])*?)(?=\|)/) do |modifiers, cell|
@@ -909,8 +944,10 @@ module RedmineReformat::Converters::TextileToMarkdown
       end
     end
 
-    def md_separate_lists_redcarpet_friendly(text)
-      text.gsub!(/\n\n<!-- end list -->\n/, "\n\n&#29;\n")
+    def md_separate_lists(text)
+      unless @format_opts[:list_separator_html_comment]
+        text.gsub!(/\n\n<!-- end list -->\n/, "\n\n&#29;\n")
+      end
     end
 
     def md_polish_before_code_restore(text)
@@ -954,7 +991,8 @@ module RedmineReformat::Converters::TextileToMarkdown
       end
     end
 
-    def md_replace_underline(text, replacement)
+    def md_replace_underline(text)
+      replacement = @format_opts[:underline_underscore] ? "_\\1_" : "<ins>\\1</ins>"
       text.gsub!(/<span class="underline">(.*?)<\/span>/m, replacement)
     end
 

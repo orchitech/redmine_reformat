@@ -44,9 +44,19 @@ module RedmineReformat::Converters::TextileToMarkdown
     include RedmineReformat::Converters::TextileToMarkdown::PandocPreprocessing
 
     def pre_process_textile(textile)
+      is_redcarpet = @ctx.to_formatting == 'markdown'
+      format_opts = {
+        # http://www.redmine.org/issues/20497
+        list_separator_html_comment: !is_redcarpet,
+        # https://www.redmine.org/issues/28169
+        underline_underscore: is_redcarpet,
+        # https://www.redmine.org/issues/23341
+        wiki_links_atomic: false,
+        table_pipe_escaping: !is_redcarpet,
+      }
 
       clean_white_space textile
-      initialize_reformatter textile, @reference
+      initialize_reformatter textile, format_opts, @reference
 
       # Do not interfere with protected blocks
       rip_offtags textile, false, false
@@ -102,7 +112,7 @@ module RedmineReformat::Converters::TextileToMarkdown
       protect_autolinks textile
       protect_qtag_chars textile
 
-      # finished with qtag caracters
+      # finished with qtag characters
       restore_real_qtags textile
 
       ## restore constructs that use qtag characters
@@ -138,31 +148,18 @@ module RedmineReformat::Converters::TextileToMarkdown
     def post_process_markdown(markdown)
 
       restore_protected_line_breaks markdown
-      # TODO: Hopefuly can be deleted
-      # Reclaim known placeholder sparations
-      #markdown.gsub!(/\.(?<ph>B(?<flavour>any|escatstart|escoutword)#{PH_RE}E\k<flavour>)(?<mis2>[)])\./) do
-      #  ".#{$~[:ph]}.#{$~[:mis2]}"
-      #end
       restore_context_free_placeholders markdown
       restore_qtag_chars_to_md markdown
       md_footnotes markdown
       md_remove_auxiliary_code_block_lang markdown
-      if @ctx.to_formatting == 'markdown'
-        # see http://www.redmine.org/issues/20497
-        md_separate_lists_redcarpet_friendly markdown
-      end
+      md_separate_lists markdown
       # Restore/unescaping sequences that are protected differently in code blocks
       md_polish_before_code_restore markdown
       # Replace code and link placeholders *after* playing with the text
       restore_aftercode_placeholders markdown
       smooth_macros markdown
       normalize_and_rip_fenced_code_blocks markdown
-      if @ctx.to_formatting == 'markdown'
-        # Redmine-Redcarpet specific, see https://www.redmine.org/issues/28169
-        md_replace_underline markdown, "_\\1_"
-      else
-        md_replace_underline markdown, "<ins>\\1</ins>"
-      end
+      md_replace_underline markdown
       # This should be the very last thing to break text length in table
       remove_init_breakers markdown
       md_reformat_tables markdown

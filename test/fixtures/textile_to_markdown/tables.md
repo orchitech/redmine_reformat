@@ -31,9 +31,9 @@ Paragraph Lorem ipsum
 
 # Wiki links with pipes are especially tricky
 
-| a1        | a2                        |
-| --------- | ------------------------- |
-| [[Pg|As]] | [[Page#Anchor|AlsoAlias]] |
+| a1          | a2                          |
+| ----------- | --------------------------- |
+| [[Pg]] - As | [[Page#Anchor]] - AlsoAlias |
 
 # Table delimiting
 

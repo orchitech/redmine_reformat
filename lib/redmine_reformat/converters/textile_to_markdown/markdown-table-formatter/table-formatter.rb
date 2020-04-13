@@ -10,7 +10,9 @@ class MarkdownTableFormatter
     @table = []
     rows = @doc.split /\r?\n/
     rows.each do |row|
-      row_array = row.split("|")
+      row_array = row.scan(/((?:[^\\|]|\\.)*)([|]|\z)/m).collect do |cell, sep|
+        cell unless cell.empty? && sep.empty?
+      end.compact
       row_array.each { |cell| cell.strip! }
       @table.push row_array
     end
