@@ -13,6 +13,29 @@ module RedmineReformat::Converters::MarkdownToCommonmark
       }
       @superscript = opts.fetch(:superscript, true)
       @silent = opts.fetch(:silent, false)
+
+      # developer use
+      nodelog_fname = opts.fetch(:debug_nodelog, nil)
+      @nodelog_f = File.open(nodelog_fname, "w") if nodelog_fname
+      @nodelog_f.sync = true if @nodelog_f
+    end
+
+    # libcmark / cmark-gfm debugging / integration testing
+    def nodelog(text)
+      e = GfmEditor.new(text)
+      e.document.walk do |node|
+        e.source(node, /\A(.).*?(.)?\z/m) do |source, range, m|
+          d1, d2 = m[1], m[2]
+          case node.type
+          when :paragraph, :text, :document, :table_cell
+            d1 = d2 = nil
+          when :list_item, :list, :header, :blockquote
+            d2 = nil
+          end
+          entry = "#{node.type},#{d1},#{d2}".gsub("\r", "CR").gsub("\n", "LF")
+          nodelog_f.syswrite "#{entry}\n"
+        end
+      end
     end
 
     def convert(text, ctx = nil)
@@ -21,6 +44,7 @@ module RedmineReformat::Converters::MarkdownToCommonmark
       converted = text.dup
       macros = extract_macros(converted)
       begin
+        nodelog(text) if @nodelog_f
         # structural changes first
         converted = outplace_superscript(converted) if @superscript
         converted = replace(converted, @replaces) if @replaces.values.any?

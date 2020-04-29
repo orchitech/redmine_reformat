@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.com/orchitech/redmine_reformat.svg?branch=master)](https://travis-ci.com/orchitech/redmine_reformat)
 
 Redmine Reformat is a [Redmine](http://www.redmine.org/) plugin providing
-a rake task for flexible rich-text field format conversion.
+a rake task for flexible rich-text field format conversions and batch editing.
 
 ## Prepare and Install
 
@@ -46,12 +46,29 @@ rake reformat:convert to_formatting=markdown workers=10
 ```
 
 If already using the `commmon_mark` format patch
-(see [#32424](https://www.redmine.org/issues/32424)):
+(see [#32424](https://www.redmine.org/issues/32424) and
+[Docker image `orchitech/redmine-gfm`](https://hub.docker.com/r/orchitech/redmine-gfm)):
 ```sh
 # convert from textile:
 rake reformat:convert to_formatting=common_mark
 # convert from Redcarpet's markdown - same command:
 rake reformat:convert to_formatting=common_mark
+```
+
+Renaming or merging Redmine project can only be done directly in
+the database. `redmine_reformat` can prepare wiki links for such
+change:
+```sh
+# 1. remove project prefix for wiki links within the renamed project
+# 2. rename project prefix in wiki links outside of the renamed project
+convcfg='[{
+  "projects": ["oldname"]
+  "converters": [["LinkRewriter", { "oldname": { "project": null } }]]
+}, {
+  "converters": [["LinkRewriter", { "oldname": { "project": "newname" } }]]
+}]'
+rake reformat:convert converters_json="$convcfg"
+# now you can rename the 'oldname' project to 'newname'
 ```
 
 Convert to HTML (assuming a hypothetical `html` rich text format):
@@ -95,6 +112,8 @@ Other advanced scenarios are covered below.
     (Redcarpet) to CommonMark/GFM.
   - `RedmineFormatter` - produces HTML using Redmine's internal formatter. Useful
     when chaining with external converters. See below for details.
+  - `LinkRewriter` - useful for refactoring Redmine project structure (renaming,
+    merging). See below for details.
   - `Ws` - calls an external web service, providing input in the POST body and
     expecting converted output in the response body.
   - Feel free to submit more :)
@@ -328,7 +347,7 @@ with text, which is preserved by default. The `collapse` macro has its
 text content converted.
 
 For detailed behavior examples, see the
-[`MarkdownToCommonmark` unit test](https://github.com/orchitech/redmine_reformat/blob/master/test/unit/converters/markdown_to_commonmark/converter_test.rb).
+[`MarkdownToCommonmark` unit test](https://github.com/orchitech/redmine_reformat/blob/master/test/unit/converters/markdown_to_commonmark_converter_test.rb).
 
 ### `RedmineFormatter`
 
@@ -354,6 +373,37 @@ Arguments:
 `textilizable()`. It converts any format supported by Redmine to
 HTML in the same ways as Redmine does it. The monkey patch blocks
 macro expansion and keeps wiki links untouched.
+
+### `LinkRewriter`
+
+Usage: `['LinkRewriter', wiki_link_rewrites]`\
+Arguments:
+- `wiki_link_rewrites` - a hash with wiki link rewrite specifications:
+  - keys in the hash are IDs or identifiers of link destination projects
+  - values are hashes with following entries:
+    - `project` specifies the new project prefix to be used. The new
+      project does not have to exist. A `nil` value forces project prefix
+      removal.
+    - `page_prefix` specifies a prefix to be prepended before the page
+      link. Useful for wiki structure refactoring.
+
+`LinkRewriter` uses monkey-patched internal Redmine renderer -
+`textilizable()` to analyze the individual wiki links. Only valid links
+leading to an existing page are considered at the moment. The actual rewriting
+is performed on the source text, so there should be no side effects.
+For the same reasons, this converter can be used with
+`"force_crlf": false, "match_trailing_nl": false`.
+
+Limitations:
+- When locating link candidates in the source text, `LinkRewriter` should
+  handle even alternative text notations, e.g.
+  `\[\[Page\]\]` (works in Markdown) or `&lbrack;&lbrack;Page&rbrack;&rbrack;`
+  (works in all formattings). But it cannot recognize all notations.
+  In Textile for example, `<notextile>[[Page]]</notextile>` will be
+  recognized, but `<notextile>[</notextile>[Page]]` will not, although both
+  inputs produce the same wiki link.
+- `LinkRewriter` is not yet feature-complete and its API can be changed
+  in the future.
 
 ### `Ws`
 

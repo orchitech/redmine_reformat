@@ -3,6 +3,7 @@ require 'redmine_reformat/converters'
 
 class ConvertersTest < ActiveSupport::TestCase
   Converters = RedmineReformat::Converters
+  Context = RedmineReformat::Context
   fixtures :projects,
            :users, :email_addresses, :user_preferences,
            :roles, :members, :member_roles,
@@ -31,7 +32,7 @@ class ConvertersTest < ActiveSupport::TestCase
     conv = configured_converters
     # projects
     tests = [[1, exp_ws], [2, exp_ws], [3, exp_md], [nil, exp_md]]
-    ctx = OpenStruct.new(item: 'Issue', from_formatting: 'textile')
+    ctx = Context.new(item: 'Issue', from_formatting: 'textile')
     tests.each do |project_id, expected|
       ctx.project_id = project_id
       assert_equal expected, conv.convert(text, ctx)
@@ -43,7 +44,7 @@ class ConvertersTest < ActiveSupport::TestCase
       ['Journal', exp_ws],
       ['Message', exp_md]
     ]
-    ctx = OpenStruct.new(project_id: 1, from_formatting: 'textile')
+    ctx = Context.new(project_id: 1, from_formatting: 'textile')
     tests.each do |item, expected|
       ctx.item = item
       assert_equal expected, conv.convert(text, ctx)
@@ -51,25 +52,25 @@ class ConvertersTest < ActiveSupport::TestCase
   end
 
   test 'should return as is' do
-    ctx = OpenStruct.new(item: 'EmptyConversionItem')
+    ctx = Context.new(item: 'EmptyConversionItem')
     text = 'test'
     assert_equal text, configured_converters.convert(text, ctx)
   end
 
   test 'should convert to CRLF' do
-    ctx = OpenStruct.new(item: 'EmptyConversionItem')
+    ctx = Context.new(item: 'EmptyConversionItem')
     text = "l1\nl2\n\n"
     expected = "l1\r\nl2\r\n\r\n"
     assert_equal expected, configured_converters.convert(text, ctx)
   end
 
   test 'should suggest to skip' do
-    ctx = OpenStruct.new(item: 'SkippedItem')
+    ctx = Context.new(item: 'SkippedItem')
     assert_nil configured_converters.convert('test', ctx)
   end
 
   test 'should fail on undefined converter' do
-    ctx = OpenStruct.new(from_formatting: 'weird')
+    ctx = Context.new(from_formatting: 'weird')
     assert_raises RuntimeError do
       configured_converters.convert('test', ctx)
     end
@@ -77,7 +78,7 @@ class ConvertersTest < ActiveSupport::TestCase
 
   test 'should restore stripped [CR]LF' do
     conv = configured_converters
-    ctx = OpenStruct.new(item: 'StripItem')
+    ctx = Context.new(item: 'StripItem')
     assert_equal "test\r\n", conv.convert("test\r\n", ctx)
     assert_equal "test\r\n", conv.convert("test\n", ctx)
   end
@@ -85,7 +86,7 @@ class ConvertersTest < ActiveSupport::TestCase
   test 'should strip added [CR]LF' do
     conv = configured_converters
     text = 'test'
-    ctx = OpenStruct.new
+    ctx = Context.new
     ['AddCrlfItem', 'AddLfItem'].each do |item|
       ctx.item = item
       assert_equal text, conv.convert(text, ctx)

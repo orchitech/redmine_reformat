@@ -6,27 +6,21 @@ require 'redmine_reformat/setting_patch'
 
 module RedmineReformat
   class Microservice
-
+    Converters = RedmineReformat::Converters
+    ConfiguredConverters = RedmineReformat::Converters::ConfiguredConverters
     CTX_DEFAULTS = {
       item: 'microservice',
       id: 0,
       project_id: 0,
-      ref: '',
     }
-    DEFAULT_CONVERTER_CONFIG = [
-      {
-        to_formatting: 'html',
-        converters: 'RedmineFormatter'
-      }
-    ]
     # request counter
     cattr_accessor :counter
     @@counter = 0
 
     def initialize(to_formatting: nil, converters_json: nil, port: 3030, from_formatting: nil, workers: 1)
       @port = port
-      @converter = RedmineReformat::Converters::from_json(converters_json) if converters_json
-      @converter ||= RedmineReformat::Converters::ConfiguredConverters.new(DEFAULT_CONVERTER_CONFIG)
+      @converter = Converters::from_json(converters_json) if converters_json
+      @converter ||= ConfiguredConverters.new(Execution::DEFAULT_CONVERTER_CONFIG)
       @convopts = {
         to_formatting: to_formatting,
         from_formatting: from_formatting,
@@ -66,7 +60,7 @@ module RedmineReformat
       local_path = File.join(File.dirname(__FILE__), '../../assets/microservice')
       super(server, local_path)
       @converter = converter
-      @params = convopts.merge(RedmineReformat::Microservice::CTX_DEFAULTS)
+      @params = convopts.merge(Microservice::CTX_DEFAULTS)
     end
 
     def do_POST(req, resp)
@@ -80,9 +74,8 @@ module RedmineReformat
       end
       raise HTTPStatus::BadRequest unless text && p[:to_formatting] && p[:from_formatting]
       Microservice.counter += 1
-      ctx = OpenStruct.new(p)
+      ctx = Context.new(p.symbolize_keys)
       ctx.id = Microservice.counter if ctx.id.zero?
-      ctx.ref = "#{ctx.item}\##{ctx.id}" if ctx.ref.empty?
       converted = convert(text, ctx)
       raise HTTPStatus::NoContent unless converted
       resp['Content-Type'] = "text/plain; charset=UTF-8"

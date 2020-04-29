@@ -1,8 +1,7 @@
 require_relative '../../test_helper'
 require 'redmine_reformat/converters/gfm_editor'
 
-class RedmineReformat::Converters::MarkdownToCommonmark::EditorTest < ActiveSupport::TestCase
-
+class RedmineReformat::Converters::GfmEditorTest < ActiveSupport::TestCase
   GfmEditor = RedmineReformat::Converters::GfmEditor
 
   test "should convert byte positions to char positions" do

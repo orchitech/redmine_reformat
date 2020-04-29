@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'redmine_reformat/converters/configured_converters'
 
 module RedmineReformat
@@ -118,7 +120,10 @@ module RedmineReformat
         converters: ['MarkdownToCommonmark'],
         force_crlf: false,
         match_trailing_nl: false,
-      },
+      }, {
+        to_formatting: 'html',
+        converters: ['RedmineFormatter'],
+      }
     ]
   end
 end

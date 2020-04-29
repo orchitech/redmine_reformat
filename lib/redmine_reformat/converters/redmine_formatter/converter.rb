@@ -2,6 +2,8 @@
 
 module RedmineReformat::Converters::RedmineFormatter
   class Converter
+    include RedmineReformat::Helpers
+
     def initialize(opts = {})
       @opts = {}
       # macros = keep | encode
@@ -12,12 +14,14 @@ module RedmineReformat::Converters::RedmineFormatter
     def convert(text, ctx = nil)
       reference = ctx && ctx.ref
       begin
-        helper = ReformatApplicationHelper.instance
-        # no need to be be thread-safe
-        helper.send("reformat_opts=", @opts)
-        output = helper.textilizable(text, {:only_path => true, :headings => false})
-        helper.send("reformat_opts=", nil)
-        output
+        with_application_helper(@opts, ctx) do |helper|
+          textilizable_opts = {
+            only_path: true,
+            headings: false,
+            project: ctx.project,
+          }
+          helper.textilizable(text, textilizable_opts)
+        end
       rescue Exception => e
         STDERR.puts "failed textilizable() '#{reference}' due to #{e.message} - #{e.class}"
         STDERR.puts "Text was:"

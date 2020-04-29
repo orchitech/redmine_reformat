@@ -1,7 +1,6 @@
 $: << File.join(File.dirname(__FILE__), 'lib')
 
 require 'getoptlong'
-require 'ostruct'
 require 'redmine_reformat/converters/textile_to_markdown/converter'
 
 Dir.chdir(File.join(File.dirname(__FILE__), 'test', 'fixtures', 'textile_to_markdown'))
@@ -40,7 +39,7 @@ Dir.glob("#{test_pattern}.textile").each do |textile|
   md = textile.sub(/(\.textile)?$/, '.md')
   md = '/dev/null' unless overwrite or File.exists?(md)
   name = textile.sub(/\.textile$/, '')
-  ctx = OpenStruct.new(ref: name, to_formatting: 'markdown')
+  ctx = RedmineReformat::Context.new(ref: name, to_formatting: 'markdown')
 
   input = File.read(textile)
   actual = converter.convert(input, ctx)

@@ -1,12 +1,9 @@
-require 'ostruct'
-require_relative '../../../test_helper'
-require 'redmine_reformat/converters/markdown_to_commonmark/converter'
+require_relative '../../test_helper'
 
-class RedmineReformat::Converters::ConverterTest < ActiveSupport::TestCase
-
+class RedmineReformat::Converters::MarkdownToCommonmarkConverterTest < ActiveSupport::TestCase
   def setup
     @converter = RedmineReformat::Converters::MarkdownToCommonmark::Converter.new
-    @ctx = OpenStruct.new(ref: self.class.name, to_formatting: 'common_mark')
+    @ctx = RedmineReformat::Context.new(ref: self.class.name, to_formatting: 'common_mark')
   end
 
   test "should convert soft break to hard break while respecting paragraph" do

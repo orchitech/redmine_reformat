@@ -89,23 +89,21 @@ module RedmineReformat::Converters
       source(line_range(lineno), pattern, &block)
     end
 
-    def replace(range, replacement, ctx = nil)
-      name = "Replace (#{range}#{" in #{ctx}" if ctx})"
+    def replace(range, replacement, ctxrange = nil)
+      name = "Replace (#{range}#{" in #{ctxrange}" if ctxrange})"
       range = range..range unless range.instance_of? Range
       raise RangeError.new("#{name} cannot be empty") if range.size.zero?
-      range = (range.min + ctx.first)..(range.max + ctx.first) if ctx
+      range = (range.min + ctxrange.first)..(range.max + ctxrange.first) if ctxrange
       edit(name, range, replacement)
     end
 
-    def insert(index, insertion, ctx = nil)
-      name = "Replace (#{index}#{" in #{ctx}" if ctx})"
-      index += ctx.first if ctx
+    def insert(index, insertion, ctxrange = nil)
+      name = "Replace (#{index}#{" in #{ctxrange}" if ctxrange})"
+      index += ctxrange.first if ctxrange
       range = index...index
       if @replacements.key? range
         @replacements[range] << insertion
       else
-        ### XXX
-        # edit(name, range, insertion.dup)
         edit(name, range, insertion)
       end
     end
@@ -165,7 +163,7 @@ module RedmineReformat::Converters
       else
         @ranges << range
       end
-      @replacements[range] = replacement
+      @replacements[range] = replacement.dup
     end
 
     # Compares ranges `<=>`-like.

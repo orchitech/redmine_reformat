@@ -1,9 +1,6 @@
-require 'ostruct'
-require 'redmine_reformat/converters/textile_to_markdown/converter'
-require 'redmine_reformat/converters/redmine_formatter/converter'
+# frozen_string_literal: true
 
 module RedmineReformat
-
   class Spec
     def initialize(klass, cols, subset = nil, args = {})
       @klass = klass
@@ -43,14 +40,14 @@ module RedmineReformat
           id = r.shift
           project_id = r.shift
           ctxvals = Hash[@ctxcols.zip(r.shift(@ctxcols.length))]
-          ctx = OpenStruct.new({
+          ctx = Context.new(
             klass: @klass,
             item: @item,
             id: id,
             project_id: project_id,
             vals: ctxvals,
-            ref: "#{@item}\##{id}"
-          })
+            ref: +"#{@item}\##{id}"
+          )
           url = @mkurl.call(ctx)
           ctx.ref << ": #{url}" if url
           vals = Hash[@cols.zip(r)]
@@ -115,27 +112,32 @@ module RedmineReformat
 
     def call(exn)
       @exn = exn
-
       Project.transaction do
         Mailer.with_deliveries(false) do
-          @from_formatting = Setting.text_formatting
-          @to_formatting = @exn.to_formatting || @from_formatting
-          @exn.start
-          migrate_settings if @exn.master?
-          migrate_objects
-          migrate_wiki_versions
-          migrate_custom_values
-          Setting.text_formatting = @to_formatting if @exn.master? && !@exn.dryrun
-          unless @exn.finish(true)
-            raise ActiveRecord::Rollback
+          Context.with_cached_projects do
+            do_migrate
           end
-          @exn.tx_wait
         end
       end
       @exn.tx_done
     end
 
     private
+    def do_migrate
+      @from_formatting = Setting.text_formatting
+      @to_formatting = @exn.to_formatting || @from_formatting
+      @exn.start
+      migrate_settings if @exn.master?
+      migrate_objects
+      migrate_wiki_versions
+      migrate_custom_values
+      Setting.text_formatting = @to_formatting if @exn.master? && !@exn.dryrun
+      unless @exn.finish(true)
+        raise ActiveRecord::Rollback
+      end
+      @exn.tx_wait
+    end
+
     def migrate_settings
       STDERR.puts "Settings"
       SETTINGS_TO_MIGRATE.each do |setting|
@@ -144,12 +146,12 @@ module RedmineReformat
     end
 
     def migrate_setting(name)
-      ctx = OpenStruct.new({
+      ctx = Context.new(
         item: 'Settings',
         from_formatting: @from_formatting,
         to_formatting: @to_formatting,
         ref: "Setting\##{name}"
-      })
+      )
       if textile = Setting.send(name)
         md = convert(textile, ctx)
         Setting.send "#{name}=", md if !@exn.dryrun && md
@@ -164,7 +166,7 @@ module RedmineReformat
 
     def migrate_wiki_versions
       item = 'wiki_version'
-      ctx = OpenStruct.new(
+      ctx = Context.new(
         :item => item,
         :from_formatting => @from_formatting,
         :to_formatting => @to_formatting

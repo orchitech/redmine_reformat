@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'json'
 require 'redmine_reformat/converters/configured_converters'
 
