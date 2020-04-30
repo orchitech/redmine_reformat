@@ -51,9 +51,19 @@ module RedmineReformat::Converters::LinkRewriter
         if meta[:link_project_literal]
           link.sub!(/^.*?#{colon}/, '')
         end
-        link = "#{rewrite[:page_prefix]}#{link}"
+
         link_project = meta[:link_project_literal]
         link_project = rewrite[:project] if rewrite.key? :project
+
+        if meta[:page].blank? && (link_project.nil? || rewrite.key?(:page_prefix))
+          prj = meta[:link_project_id] && Project.find(meta[:link_project_id])
+          start_page = prj && prj.wiki && prj.wiki.start_page
+          next all unless start_page
+          link = "#{start_page}#{link}"
+        end
+
+        link = "#{rewrite.fetch(:page_prefix, '')}#{link}"
+
         project_sep = ':' if link_project
         "#{op}#{link_project}#{project_sep}#{link}#{cl}"
       end

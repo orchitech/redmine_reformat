@@ -59,22 +59,39 @@ class RedmineReformat::Converters::LinkRewriterConverterTest < ActiveSupport::Te
   end
 
   test "should change linked project without adding page prefix" do
-    wiki_link_rewrites = {
+    @wiki_link_rewrites = {
       'ecookbook' => {project: 'book'}
     }
-    converter = Converter.new(wiki_link_rewrites)
+    converter = Converter.new(@wiki_link_rewrites)
     text = "[[ecookbook:Page_with_an_inline_image]] [[Page_with_an_inline_image]] [[ecookbook:Foo]]"
     expected = "[[book:Page_with_an_inline_image]] [[book:Page_with_an_inline_image]] [[ecookbook:Foo]]"
     assert_equal expected, converter.convert(text, @ctx)
   end
 
   test "should accept project_id instead identifier" do
-    wiki_link_rewrites = {
+    @wiki_link_rewrites = {
       1 => {project: 'book'}
     }
-    converter = Converter.new(wiki_link_rewrites)
+    converter = Converter.new(@wiki_link_rewrites)
     text = "[[ecookbook:Page_with_an_inline_image]] [[Page_with_an_inline_image]] [[ecookbook:Foo]]"
     expected = "[[book:Page_with_an_inline_image]] [[book:Page_with_an_inline_image]] [[ecookbook:Foo]]"
+    assert_equal expected, converter.convert(text, @ctx)
+  end
+
+  test "should use explicit wiki start page when project prefix is removed" do
+    @wiki_link_rewrites = {
+      'ecookbook' => {project: nil}
+    }
+    converter = Converter.new(@wiki_link_rewrites)
+    text = "[[ecookbook:]]"
+    expected = "[[CookBook documentation]]"
+    assert_equal expected, converter.convert(text, @ctx)
+  end
+
+  test "should use explicit wiki start page when its name is changed" do
+    converter = Converter.new(@wiki_link_rewrites)
+    text = "[[ecookbook:]]"
+    expected = "[[ecookbook:NewBookCookBook documentation]]"
     assert_equal expected, converter.convert(text, @ctx)
   end
 end
