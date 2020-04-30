@@ -53,8 +53,8 @@ class RedmineReformat::Converters::LinkRewriterConverterTest < ActiveSupport::Te
   test "should change linked project" do
     @wiki_link_rewrites['ecookbook'][:project] = 'book'
     converter = Converter.new(@wiki_link_rewrites)
-    text = "[[ecookbook:Page_with_an_inline_image]] [[Page_with_an_inline_image]]"
-    expected = "[[book:NewBookPage_with_an_inline_image]] [[book:NewBookPage_with_an_inline_image]]"
+    text = "[[ecookbook:Page_with_an_inline_image#foo]] [[Page_with_an_inline_image]]"
+    expected = "[[book:NewBookPage_with_an_inline_image#foo]] [[book:NewBookPage_with_an_inline_image]]"
     assert_equal expected, converter.convert(text, @ctx)
   end
 

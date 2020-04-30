@@ -165,6 +165,12 @@ module RedmineReformat::Helpers
             wiki_link[:link_project_literal] = identifier
           end
 
+          # extract anchor
+          if page =~ /^(.+?)\#(.+)$/
+            page, anchor = $1, $2
+            wiki_link[:anchor] = anchor
+          end
+
           wiki_link[:page] = page
           if link_project
             wiki_link[:link_project_id] = link_project.id

@@ -3,7 +3,7 @@ Redmine::Plugin.register :redmine_reformat do
   author 'Martin Cizek, Orchitech Solutions'
   author_url 'https://orchi.tech/'
   description 'Rake task providing configurable format conversion. Contains portions of Ecodev and plan.io work.'
-  version '0.5.0'
+  version '0.5.1'
   hidden true if respond_to? :hidden
 
   requires_redmine version_or_higher: '3.4.0'
