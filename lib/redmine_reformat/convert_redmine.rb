@@ -96,7 +96,7 @@ module RedmineReformat
     ]
 
     # Planio specific
-    if defined?(RedmineCrm)
+    if defined?(RedmineCrm) && defined?(CrmTemplate)
       ITEMS_TO_MIGRATE << Spec.new(CrmTemplate, :content)
     end
 
