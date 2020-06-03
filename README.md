@@ -114,7 +114,7 @@ Other advanced scenarios are covered below.
     when chaining with external converters. See below for details.
   - `LinkRewriter` - useful for refactoring Redmine project structure (renaming,
     merging). See below for details.
-  - `Ws` - calls an external web service, providing input in the POST body and
+  - `Ws` - calls an external web service, providing input in the request body and
     expecting converted output in the response body.
   - Feel free to submit more :)
 - Conversions can be chained - e.g. convert Atlassian Wiki Markup (roughly similar
@@ -410,8 +410,11 @@ Limitations:
 Usage: `['Ws', '<url>']`\
 Arguments:
 - `url` - address of the web service that performs conversion.
+- `options` - a hash with optional parameters:
+  - `method`: HTTP method to use - either `PUT` or `POST`.
+    Defaults to `PUT` since 0.6.0.
 
-`Ws` performs HTTP POST request to the given URL and passes
+`Ws` performs HTTP PUT or POST request to the given URL and passes
 text to convert in the request body. The result is expected in the
 response body. This allows fast and easy integration with converters
 in different programming languages on various platforms.
@@ -457,7 +460,7 @@ In the example above, visit `http://localhost:3030` to get more info on usage.
 
 The microservice works as follows:
 - Instead of reading texts and writing them to the database, it takes them
-  from HTTP POST request and returns converted text as a response body.
+  from HTTP PUT or POST request and returns converted text as a response body.
 - Context variables for eventual filtering and logging can be provided as
   query parameters. That is `from_formatting`, `to_formatting`, `item`, `id`,
   `project_id` and `ref`. If not provided, safe defaults are used.
@@ -466,6 +469,12 @@ The microservice works as follows:
   `reformat:convert`, which takes defaults from current Redmine's settings.
 - The `workers` variable is currently ignored.
 - There is an extra attribute `port` with obvious meaning.
+
+Invokation example:
+```sh
+curl -XPUT -H 'Content-Type: text/plain' -d '# Foo' 'http://localhost:3030?to_formatting=html'
+# produces '<h1>Foo</h1>'
+```
 
 ## History
 

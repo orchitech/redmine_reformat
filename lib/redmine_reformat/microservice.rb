@@ -68,11 +68,13 @@ module RedmineReformat
       params_override(p, WEBrick::HTTPUtils::parse_query(req.query_string))
       text = if req.content_type =~ /^application\/x-www-form-urlencoded/
         params_override(p, req.query)
-        req.query['text']
+        req.query['text'] or raise HTTPStatus::BadRequest, "Form input 'text' required"
       else
-        req.body
+        req.body or raise HTTPStatus::BadRequest, "Body required"
       end
-      raise HTTPStatus::BadRequest unless text && p[:to_formatting] && p[:from_formatting]
+      unless p[:to_formatting] && p[:from_formatting]
+        raise HTTPStatus::BadRequest, "Both from_formatting and to_formatting required"
+      end
       Microservice.counter += 1
       ctx = Context.new(p.symbolize_keys)
       ctx.id = Microservice.counter if ctx.id.zero?
@@ -82,6 +84,8 @@ module RedmineReformat
       resp.keep_alive = false
       resp.body = converted
     end
+
+    alias :do_PUT :do_POST
 
     private
     def params_override(params, override)

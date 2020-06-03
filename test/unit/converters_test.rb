@@ -97,7 +97,7 @@ class ConvertersTest < ActiveSupport::TestCase
   def mock_ws_uri(id)
     uri = "http://ws#{id}.reformat.example.net"
     @webmocks ||= {}
-    @webmocks[id] ||= stub_request(:post, uri)
+    @webmocks[id] ||= stub_request(:any, uri)
       .to_return {|req| {body: mock_ws_response(id, req.body)}}
     uri
   end
